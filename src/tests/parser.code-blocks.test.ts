@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { Parser } from "../Parser";
+import { StreamingParser } from "../StreamingParser";
 
 describe("Parser.append code blocks", () => {
   it("parses a fenced code block", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("```\nconst x = 1;\n```");
 
     expect(parser.getLiveTree()).toEqual([
@@ -19,7 +19,7 @@ describe("Parser.append code blocks", () => {
   });
 
   it("captures language and meta from opening fence", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("```ts test=1\nx\n```");
 
     expect(parser.getLiveTree()).toEqual([
@@ -35,7 +35,7 @@ describe("Parser.append code blocks", () => {
   });
 
   it("optimistically parses unfinished fenced code block", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("```js\nlet a");
 
     expect(parser.getLiveTree()).toEqual([
@@ -51,7 +51,7 @@ describe("Parser.append code blocks", () => {
   });
 
   it("supports incremental growth and close of code fence", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("```\na");
     expect(parser.getLiveTree()).toEqual([
       {
@@ -80,7 +80,7 @@ describe("Parser.append code blocks", () => {
 
 describe("Parser.append code blocks in nested contexts", () => {
   it("parses fenced code block inside blockquote", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("> ```\n> x\n> ```");
 
     expect(parser.getLiveTree()).toEqual([
@@ -103,7 +103,7 @@ describe("Parser.append code blocks in nested contexts", () => {
   });
 
   it("parses fenced code block inside list item", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("- ```\n  x\n  ```");
 
     expect(parser.getLiveTree()).toEqual([

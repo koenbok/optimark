@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { Parser } from "../Parser";
+import { StreamingParser } from "../StreamingParser";
 import { node } from "./helpers/ast";
 
 describe("Parser.append inline code spans", () => {
   it("parses a closed code span inside text", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("a `bc` d");
 
     expect(parser.getLiveTree()).toEqual([
@@ -17,7 +17,7 @@ describe("Parser.append inline code spans", () => {
   });
 
   it("optimistically auto-closes an unfinished code span", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("`hello");
 
     expect(parser.getLiveTree()).toEqual([
@@ -28,7 +28,7 @@ describe("Parser.append inline code spans", () => {
   });
 
   it("treats markdown syntax inside code spans as raw code", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("`**x** [a]`");
 
     expect(parser.getLiveTree()).toEqual([
@@ -41,7 +41,7 @@ describe("Parser.append inline code spans", () => {
 
 describe("Parser.append escapes", () => {
   it("does not parse escaped emphasis markers", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("\\*x\\*");
 
     expect(parser.getLiveTree()).toEqual([
@@ -50,7 +50,7 @@ describe("Parser.append escapes", () => {
   });
 
   it("does not parse escaped link opener", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("\\[a]");
 
     expect(parser.getLiveTree()).toEqual([
@@ -59,7 +59,7 @@ describe("Parser.append escapes", () => {
   });
 
   it("does not parse escaped backticks as code spans", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("\\`x\\`");
 
     expect(parser.getLiveTree()).toEqual([

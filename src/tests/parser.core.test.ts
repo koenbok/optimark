@@ -1,17 +1,17 @@
 import { describe, expect, it } from "bun:test";
-import { Parser } from "../Parser";
+import { StreamingParser } from "../StreamingParser";
 import { node } from "./helpers/ast";
 
 describe("Parser.append core", () => {
   it("parses constructor initial text immediately", () => {
-    const parser = new Parser("seed");
+    const parser = new StreamingParser("seed");
     expect(parser.getLiveTree()).toEqual([
       node("paragraph", 0, 4, [node("text", 0, 4)]),
     ]);
   });
 
   it("appends plain text and builds a paragraph AST", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("hello");
 
     expect(parser.getLiveTree()).toEqual([
@@ -20,7 +20,7 @@ describe("Parser.append core", () => {
   });
 
   it("consumes completed blocks and keeps active block", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("first\n\nsecond");
 
     expect(parser.getLiveTree()).toEqual([
@@ -30,7 +30,7 @@ describe("Parser.append core", () => {
   });
 
   it("buffers partial tags and then parses optimistic strong node", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
 
     parser.append("*");
     expect(parser.getLiveTree()).toEqual([]);
@@ -43,7 +43,7 @@ describe("Parser.append core", () => {
   });
 
   it("auto-closes nested inline tags in active buffer", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("**hello *world");
 
     expect(parser.getLiveTree()).toEqual([
@@ -57,7 +57,7 @@ describe("Parser.append core", () => {
   });
 
   it("tracks absolute offsets across multiple committed appends", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("one\n\n");
     parser.append("two\n\n");
     parser.append("three");
@@ -70,7 +70,7 @@ describe("Parser.append core", () => {
   });
 
   it("parses heading depth metadata", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("### title");
 
     expect(parser.getLiveTree()).toEqual([
@@ -85,7 +85,7 @@ describe("Parser.append core", () => {
   });
 
   it("treats empty append as a no-op", () => {
-    const parser = new Parser("abc");
+    const parser = new StreamingParser("abc");
     parser.append("");
     expect(parser.getLiveTree()).toEqual([
       node("paragraph", 0, 3, [node("text", 0, 3)]),

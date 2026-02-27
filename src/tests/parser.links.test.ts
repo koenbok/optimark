@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { Parser } from "../Parser";
+import { StreamingParser } from "../StreamingParser";
 import { node } from "./helpers/ast";
 
 describe("Parser.append optimistic links", () => {
   it("auto-closes an unfinished link label and emits a link", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("[hel");
 
     expect(parser.getLiveTree()).toEqual([
@@ -13,7 +13,7 @@ describe("Parser.append optimistic links", () => {
   });
 
   it("promotes a closed label to a link even without destination", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("[hello]");
 
     expect(parser.getLiveTree()).toEqual([
@@ -22,7 +22,7 @@ describe("Parser.append optimistic links", () => {
   });
 
   it("parses an unfinished link destination optimistically after ](", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("[hello](");
 
     expect(parser.getLiveTree()).toEqual([
@@ -31,7 +31,7 @@ describe("Parser.append optimistic links", () => {
   });
 
   it("keeps growing an unfinished destination as link node", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("[hello](ht");
 
     expect(parser.getLiveTree()).toEqual([
@@ -40,7 +40,7 @@ describe("Parser.append optimistic links", () => {
   });
 
   it("parses a finished inline link as link node", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("[hello](x)");
 
     expect(parser.getLiveTree()).toEqual([
@@ -49,7 +49,7 @@ describe("Parser.append optimistic links", () => {
   });
 
   it("supports incremental growth from open label to full destination", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("[hel");
     expect(parser.getLiveTree()).toEqual([
       node("paragraph", 0, 4, [node("link", 0, 4, [node("text", 1, 4)])]),
@@ -67,7 +67,7 @@ describe("Parser.append optimistic links", () => {
   });
 
   it("parses links that follow plain text in the same block", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("x[hel");
 
     expect(parser.getLiveTree()).toEqual([
@@ -79,7 +79,7 @@ describe("Parser.append optimistic links", () => {
   });
 
   it("parses link labels with nested inline formatting", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("[**hi**]");
 
     expect(parser.getLiveTree()).toEqual([
@@ -97,7 +97,7 @@ describe("Parser.append optimistic links", () => {
   });
 
   it("supports multiple optimistic links in one paragraph", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("[a] [b](x)");
 
     expect(parser.getLiveTree()).toEqual([
@@ -110,7 +110,7 @@ describe("Parser.append optimistic links", () => {
   });
 
   it("keeps parsing text after an optimistic link", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("[a] tail");
 
     expect(parser.getLiveTree()).toEqual([

@@ -1,138 +1,116 @@
-import type { AstNode } from "./types";
+import type { AstNode } from "../types";
+import type { BlockParseResult } from "./types";
+import { InlineReducer } from "./InlineReducer";
 
-type InlineFrame = {
-  type: "emphasis" | "strong";
-  marker: "*" | "_" | "**" | "__";
-  start: number;
-  children: AstNode[];
-};
+export class BlockReducer {
+  constructor(private readonly inline: InlineReducer) {}
 
-export class Parser {
-  private liveTree: AstNode[] = [];
-  private committedBlocks: AstNode[] = [];
-  private pendingText: string;
-  private committedOffset = 0;
+  parseBlocks(text: string, absoluteStart: number): AstNode[] {
+    const nodes: AstNode[] = [];
+    let cursor = 0;
 
-  constructor(initialText: string) {
-    this.pendingText = initialText;
-    this.rebuildLiveTree();
-  }
-
-  append(text: string): void {
-    if (!text) return;
-    this.pendingText += text;
-    this.consumeCommittedBlocks();
-    this.rebuildLiveTree();
-  }
-
-  getLiveTree(): AstNode[] {
-    return this.liveTree;
-  }
-
-  getPendingText(): string {
-    return this.pendingText;
-  }
-
-  private consumeCommittedBlocks(): void {
-    while (true) {
-      const boundary = this.pendingText.indexOf("\n\n");
-      if (boundary < 0) {
-        return;
+    while (cursor < text.length) {
+      while (cursor < text.length && text[cursor] === "\n") {
+        cursor += 1;
+      }
+      if (cursor >= text.length) {
+        break;
       }
 
-      const blockText = this.pendingText.slice(0, boundary);
-      if (blockText.length > 0) {
-        this.committedBlocks.push(
-          this.parseBlock(blockText, this.committedOffset),
-        );
-      }
-
-      this.pendingText = this.pendingText.slice(boundary + 2);
-      this.committedOffset += boundary + 2;
+      const remaining = text.slice(cursor);
+      const parsed = this.parseBlockAt(remaining, absoluteStart + cursor);
+      nodes.push(parsed.node);
+      cursor += Math.max(parsed.consumed, 1);
     }
+
+    return nodes;
   }
 
-  private rebuildLiveTree(): void {
-    const pendingSuffixLength = this.getPendingSuffixLength(this.pendingText);
-    const parsable = this.pendingText.slice(
-      0,
-      this.pendingText.length - pendingSuffixLength,
-    );
-    const activeNodes: AstNode[] = parsable.length
-      ? [this.parseBlock(parsable, this.committedOffset)]
-      : [];
-
-    this.liveTree = [...this.committedBlocks, ...activeNodes];
-  }
-
-  private getPendingSuffixLength(text: string): number {
-    if (!text) return 0;
-
-    let pending = 0;
-    const headingPrefix = text.match(/(?:^|\n)(#{1,6})$/);
-    if (headingPrefix?.[1]) {
-      pending = Math.max(pending, headingPrefix[1].length);
-    }
-
-    if (this.endsWithUnescapedSingleMarker(text, "*")) {
-      pending = Math.max(pending, 1);
-    }
-
-    if (this.endsWithUnescapedSingleMarker(text, "_")) {
-      pending = Math.max(pending, 1);
-    }
-
-    return pending;
-  }
-
-  private parseBlock(blockText: string, absoluteStart: number): AstNode {
+  parseBlockAt(blockText: string, absoluteStart: number): BlockParseResult {
     const thematicBreakNode = this.parseThematicBreak(blockText, absoluteStart);
     if (thematicBreakNode) {
-      return thematicBreakNode;
+      return { node: thematicBreakNode, consumed: blockText.length };
     }
 
     const codeBlockNode = this.parseFencedCodeBlock(blockText, absoluteStart);
     if (codeBlockNode) {
-      return codeBlockNode;
-    }
-
-    const blockquoteNode = this.parseBlockquoteBlock(blockText, absoluteStart);
-    if (blockquoteNode) {
-      return blockquoteNode;
+      return {
+        node: codeBlockNode,
+        consumed: Math.max(1, codeBlockNode.end - absoluteStart),
+      };
     }
 
     const tableNode = this.parseTableBlock(blockText, absoluteStart);
     if (tableNode) {
-      return tableNode;
+      return {
+        node: tableNode,
+        consumed: Math.max(1, tableNode.end - absoluteStart),
+      };
     }
 
     const listNode = this.parseListBlock(blockText, absoluteStart);
     if (listNode) {
-      return listNode;
-    }
-
-    const blockEnd = absoluteStart + blockText.length;
-    const headingMatch = blockText.match(/^(#{1,6})\s+/);
-
-    if (headingMatch) {
-      const markerLength = headingMatch[0].length;
-      const inlineStart = absoluteStart + markerLength;
-      const inlineText = blockText.slice(markerLength);
-      const depth = (headingMatch[1]?.length ?? 1) as 1 | 2 | 3 | 4 | 5 | 6;
       return {
-        type: "heading",
-        start: absoluteStart,
-        end: blockEnd,
-        depth,
-        children: this.parseInline(inlineText, inlineStart),
+        node: listNode,
+        consumed: Math.max(1, listNode.end - absoluteStart),
       };
     }
 
+    const blockquoteNode = this.parseBlockquoteBlock(blockText, absoluteStart);
+    if (blockquoteNode) {
+      return {
+        node: blockquoteNode,
+        consumed: Math.max(1, blockquoteNode.end - absoluteStart),
+      };
+    }
+
+    const heading = this.parseHeadingLine(blockText, absoluteStart);
+    if (heading) {
+      return heading;
+    }
+
+    return this.parseParagraph(blockText, absoluteStart);
+  }
+
+  private parseHeadingLine(
+    blockText: string,
+    absoluteStart: number,
+  ): BlockParseResult | null {
+    const lineEnd = blockText.indexOf("\n");
+    const firstLine = lineEnd === -1 ? blockText : blockText.slice(0, lineEnd);
+    const headingMatch = firstLine.match(/^(#{1,6})\s+/);
+    if (!headingMatch) {
+      return null;
+    }
+
+    const markerLength = headingMatch[0].length;
+    const inlineStart = absoluteStart + markerLength;
+    const inlineText = firstLine.slice(markerLength);
+    const depth = (headingMatch[1]?.length ?? 1) as 1 | 2 | 3 | 4 | 5 | 6;
+    const consumed = firstLine.length;
+
     return {
-      type: "paragraph",
-      start: absoluteStart,
-      end: blockEnd,
-      children: this.parseInline(blockText, absoluteStart),
+      node: {
+        type: "heading",
+        start: absoluteStart,
+        end: absoluteStart + consumed,
+        depth,
+        children: this.inline.parseInline(inlineText, inlineStart),
+      },
+      consumed,
+    };
+  }
+
+  private parseParagraph(blockText: string, absoluteStart: number): BlockParseResult {
+    const blockEnd = absoluteStart + blockText.length;
+    return {
+      node: {
+        type: "paragraph",
+        start: absoluteStart,
+        end: blockEnd,
+        children: this.inline.parseInline(blockText, absoluteStart),
+      },
+      consumed: Math.max(1, blockText.length),
     };
   }
 
@@ -331,7 +309,7 @@ export class Parser {
         end: lineStart + contentEnd,
         children:
           trimmed.length > 0
-            ? this.parseInline(trimmed, lineStart + contentStart)
+            ? this.inline.parseInline(trimmed, lineStart + contentStart)
             : [],
       };
     });
@@ -420,14 +398,18 @@ export class Parser {
     if (line.startsWith("|")) {
       start = 1;
     }
-    if (end > start && line[end - 1] === "|" && !this.isEscapedAt(line, end - 1)) {
+    if (
+      end > start &&
+      line[end - 1] === "|" &&
+      !this.inline.isEscapedAt(line, end - 1)
+    ) {
       end -= 1;
     }
 
     const segments: Array<{ raw: string; start: number; end: number }> = [];
     let segmentStart = start;
     for (let i = start; i < end; i += 1) {
-      if (line[i] === "|" && !this.isEscapedAt(line, i)) {
+      if (line[i] === "|" && !this.inline.isEscapedAt(line, i)) {
         segments.push({ raw: line.slice(segmentStart, i), start: segmentStart, end: i });
         segmentStart = i + 1;
       }
@@ -470,16 +452,28 @@ export class Parser {
       absoluteStart,
       innerText.length,
     );
-    const child = this.remapNodePositions(
-      this.parseBlock(innerText, 0),
-      boundaryMap,
-    );
+
+    const parsedInnerNodes = this.parseBlocks(innerText, 0);
+    const innerNodes =
+      parsedInnerNodes.length > 0
+        ? parsedInnerNodes.map((node) => this.remapNodePositions(node, boundaryMap))
+        : [
+            this.remapNodePositions(
+              {
+                type: "paragraph",
+                start: 0,
+                end: 0,
+                children: [],
+              },
+              boundaryMap,
+            ),
+          ];
 
     return {
       type: "blockquote",
       start: absoluteStart,
       end: absoluteStart + blockText.length,
-      children: [child],
+      children: innerNodes,
     };
   }
 
@@ -594,14 +588,12 @@ export class Parser {
       }
       const lineStart = absoluteStart + lineStartOffset;
       const markerEndInLine = indent + marker.markerLength;
-      const itemTextStart = lineStart + markerEndInLine;
       let itemEnd = lineStart + line.length;
       const contentLines: string[] = [line];
       const contentLineStarts: number[] = [lineStart];
       const contentStripLengths: number[] = [markerEndInLine];
       lineIndex += 1;
 
-      // Consume non-list continuation lines that still belong to this item body.
       while (lineIndex < lines.length) {
         const continuationLine = lines[lineIndex];
         if (continuationLine === undefined) {
@@ -653,7 +645,6 @@ export class Parser {
         }
       }
 
-      // Parse nested lists as long as the next line is more indented.
       while (lineIndex < lines.length) {
         const nextLine = lines[lineIndex];
         if (nextLine === undefined) {
@@ -783,343 +774,6 @@ export class Parser {
     return indent;
   }
 
-  private parseInline(text: string, absoluteStart: number): AstNode[] {
-    const root: AstNode[] = [];
-    const stack: InlineFrame[] = [];
-    let index = 0;
-    const escapedAt = this.buildEscapedMap(text);
-
-    const pushInto = (target: AstNode[], node: AstNode): void => {
-      const last = target.at(-1);
-      if (
-        last &&
-        last.type === "text" &&
-        node.type === "text" &&
-        last.end === node.start
-      ) {
-        target[target.length - 1] = {
-          type: "text",
-          start: last.start,
-          end: node.end,
-        };
-        return;
-      }
-      target.push(node);
-    };
-
-    const pushNode = (node: AstNode): void => {
-      const parent = stack.at(-1);
-      if (parent) {
-        pushInto(parent.children, node);
-        return;
-      }
-      pushInto(root, node);
-    };
-
-    const isTokenStart = (pos: number): boolean => {
-      if (pos >= text.length) return false;
-      const char = text[pos];
-      if (char === "\n") return true;
-      if (char === "\\") return true;
-      if (escapedAt[pos]) return false;
-      if (char === "[" || char === "`" || char === "<") return true;
-      if (char === "!" && pos + 1 < text.length && text[pos + 1] === "[") {
-        return true;
-      }
-      return this.getEmphasisMarkerAt(text, pos) !== null;
-    };
-
-    const trimTrailingSpacesFromCurrentText = (count: number): void => {
-      const parent = stack.at(-1);
-      const target = parent ? parent.children : root;
-      const last = target.at(-1);
-      if (!last || last.type !== "text") {
-        return;
-      }
-      const available = last.end - last.start;
-      if (available <= count) {
-        target.pop();
-        return;
-      }
-      target[target.length - 1] = {
-        type: "text",
-        start: last.start,
-        end: last.end - count,
-      };
-    };
-
-    while (index < text.length) {
-      if (text[index] === "\n") {
-        const hasTwoSpaces =
-          index >= 2 && text[index - 1] === " " && text[index - 2] === " ";
-        if (hasTwoSpaces) {
-          trimTrailingSpacesFromCurrentText(2);
-          pushNode({
-            type: "line_break",
-            hard: true,
-            start: absoluteStart + index - 2,
-            end: absoluteStart + index + 1,
-          });
-        } else {
-          pushNode({
-            type: "soft_break",
-            start: absoluteStart + index,
-            end: absoluteStart + index + 1,
-          });
-        }
-        index += 1;
-        continue;
-      }
-
-      if (text[index] === "\\") {
-        const isHardBreakSlash =
-          index + 1 < text.length &&
-          text[index + 1] === "\n" &&
-          !escapedAt[index];
-        if (isHardBreakSlash) {
-          pushNode({
-            type: "line_break",
-            hard: true,
-            start: absoluteStart + index,
-            end: absoluteStart + index + 2,
-          });
-          index += 2;
-          continue;
-        }
-
-        const nextIndex = Math.min(text.length, index + 2);
-        pushNode({
-          type: "text",
-          start: absoluteStart + index,
-          end: absoluteStart + nextIndex,
-        });
-        index = nextIndex;
-        continue;
-      }
-
-      if (!escapedAt[index] && text[index] === "`") {
-        const parsedCodeSpan = this.parseOptimisticCodeSpanAt(
-          text,
-          index,
-          absoluteStart,
-        );
-        pushNode(parsedCodeSpan.node);
-        index = parsedCodeSpan.nextIndex;
-        continue;
-      }
-
-      if (
-        !escapedAt[index] &&
-        text[index] === "!" &&
-        index + 1 < text.length &&
-        text[index + 1] === "["
-      ) {
-        const parsedImage = this.parseOptimisticImageAt(text, index, absoluteStart);
-        pushNode(parsedImage.node);
-        index = parsedImage.nextIndex;
-        continue;
-      }
-
-      if (!escapedAt[index] && text[index] === "[") {
-        const parsedLink = this.parseOptimisticLinkAt(text, index, absoluteStart);
-        pushNode(parsedLink.node);
-        index = parsedLink.nextIndex;
-        continue;
-      }
-
-      if (!escapedAt[index] && text[index] === "<") {
-        const parsedAutolink = this.parseAutolinkAt(text, index, absoluteStart);
-        if (parsedAutolink) {
-          pushNode(parsedAutolink.node);
-          index = parsedAutolink.nextIndex;
-          continue;
-        }
-        // Not a valid autolink token; consume '<' as text to guarantee progress.
-        pushNode({
-          type: "text",
-          start: absoluteStart + index,
-          end: absoluteStart + index + 1,
-        });
-        index += 1;
-        continue;
-      }
-
-      const marker = !escapedAt[index]
-        ? this.getEmphasisMarkerAt(text, index)
-        : null;
-      if (marker !== null) {
-        const top = stack[stack.length - 1];
-        const markerLength = marker.length;
-        const markerStart = absoluteStart + index;
-
-        if (top && top.marker === marker) {
-          stack.pop();
-          pushNode({
-            type: top.type,
-            start: top.start,
-            end: markerStart + markerLength,
-            children: top.children,
-          });
-          index += markerLength;
-          continue;
-        }
-
-        stack.push({
-          type: markerLength === 2 ? "strong" : "emphasis",
-          marker,
-          start: markerStart,
-          children: [],
-        });
-        index += markerLength;
-        continue;
-      }
-
-      const runStart = index;
-      while (index < text.length && !isTokenStart(index)) {
-        index += 1;
-      }
-
-      pushNode({
-        type: "text",
-        start: absoluteStart + runStart,
-        end: absoluteStart + index,
-      });
-    }
-
-    // Keep the live typing experience smooth by auto-closing unclosed inline tags.
-    while (stack.length > 0) {
-      const frame = stack.pop() as InlineFrame;
-      pushNode({
-        type: frame.type,
-        start: frame.start,
-        end: absoluteStart + text.length,
-        children: frame.children,
-      });
-    }
-
-    return root;
-  }
-
-  private parseOptimisticLinkAt(
-    text: string,
-    startIndex: number,
-    absoluteStart: number,
-  ): { node: AstNode; nextIndex: number } {
-    const labelClose = text.indexOf("]", startIndex + 1);
-    const hasClosedLabel = labelClose !== -1;
-    const labelEndExclusive = hasClosedLabel ? labelClose : text.length;
-    const labelText = text.slice(startIndex + 1, labelEndExclusive);
-    const labelChildren = this.parseInline(
-      labelText,
-      absoluteStart + startIndex + 1,
-    );
-
-    let nextIndex = hasClosedLabel ? labelClose + 1 : text.length;
-    if (
-      hasClosedLabel &&
-      nextIndex < text.length &&
-      text[nextIndex] === "("
-    ) {
-      const destinationClose = text.indexOf(")", nextIndex + 1);
-      nextIndex = destinationClose === -1 ? text.length : destinationClose + 1;
-    }
-
-    return {
-      node: {
-        type: "link",
-        start: absoluteStart + startIndex,
-        end: absoluteStart + nextIndex,
-        url: null,
-        title: null,
-        children: labelChildren,
-      },
-      nextIndex,
-    };
-  }
-
-  private parseOptimisticCodeSpanAt(
-    text: string,
-    startIndex: number,
-    absoluteStart: number,
-  ): { node: AstNode; nextIndex: number } {
-    const closingTick = text.indexOf("`", startIndex + 1);
-    const hasClosingTick = closingTick !== -1;
-    const contentEnd = hasClosingTick ? closingTick : text.length;
-    const nextIndex = hasClosingTick ? closingTick + 1 : text.length;
-
-    return {
-      node: {
-        type: "code_span",
-        start: absoluteStart + startIndex,
-        end: absoluteStart + nextIndex,
-        value: text.slice(startIndex + 1, contentEnd),
-      },
-      nextIndex,
-    };
-  }
-
-  private parseOptimisticImageAt(
-    text: string,
-    startIndex: number,
-    absoluteStart: number,
-  ): { node: AstNode; nextIndex: number } {
-    const labelClose = text.indexOf("]", startIndex + 2);
-    const hasClosedLabel = labelClose !== -1;
-    const labelEndExclusive = hasClosedLabel ? labelClose : text.length;
-    const alt = text.slice(startIndex + 2, labelEndExclusive);
-
-    let nextIndex = hasClosedLabel ? labelClose + 1 : text.length;
-    let url: string | null = null;
-
-    if (
-      hasClosedLabel &&
-      nextIndex < text.length &&
-      text[nextIndex] === "("
-    ) {
-      const destinationClose = text.indexOf(")", nextIndex + 1);
-      const destinationEnd =
-        destinationClose === -1 ? text.length : destinationClose;
-      url = text.slice(nextIndex + 1, destinationEnd);
-      nextIndex = destinationClose === -1 ? text.length : destinationClose + 1;
-    }
-
-    return {
-      node: {
-        type: "image",
-        start: absoluteStart + startIndex,
-        end: absoluteStart + nextIndex,
-        url,
-        title: null,
-        alt,
-      },
-      nextIndex,
-    };
-  }
-
-  private parseAutolinkAt(
-    text: string,
-    startIndex: number,
-    absoluteStart: number,
-  ): { node: AstNode; nextIndex: number } | null {
-    const close = text.indexOf(">", startIndex + 1);
-    if (close === -1) {
-      return null;
-    }
-    const raw = text.slice(startIndex + 1, close);
-    if (!/^https?:\/\/[^\s>]+$/.test(raw)) {
-      return null;
-    }
-    return {
-      node: {
-        type: "autolink",
-        start: absoluteStart + startIndex,
-        end: absoluteStart + close + 1,
-        url: raw,
-      },
-      nextIndex: close + 1,
-    };
-  }
-
   private parseStrippedBlock(
     lines: string[],
     lineStarts: number[],
@@ -1135,48 +789,8 @@ export class Parser {
       stripLengths,
       innerText.length,
     );
-    return this.remapNodePositions(this.parseBlock(innerText, 0), boundaryMap);
-  }
-
-  private getEmphasisMarkerAt(
-    text: string,
-    pos: number,
-  ): "*" | "_" | "**" | "__" | null {
-    const next2 = text.slice(pos, pos + 2);
-    if (next2 === "**" || next2 === "__") return next2;
-    const next1 = text[pos];
-    if (next1 === "*" || next1 === "_") return next1;
-    return null;
-  }
-
-  private buildEscapedMap(text: string): boolean[] {
-    const escapedAt = new Array<boolean>(text.length).fill(false);
-    let slashRun = 0;
-    for (let i = 0; i < text.length; i += 1) {
-      escapedAt[i] = slashRun % 2 === 1;
-      if (text[i] === "\\") {
-        slashRun += 1;
-      } else {
-        slashRun = 0;
-      }
-    }
-    return escapedAt;
-  }
-
-  private isEscapedAt(text: string, pos: number): boolean {
-    let slashCount = 0;
-    let cursor = pos - 1;
-    while (cursor >= 0 && text[cursor] === "\\") {
-      slashCount += 1;
-      cursor -= 1;
-    }
-    return slashCount % 2 === 1;
-  }
-
-  private endsWithUnescapedSingleMarker(text: string, marker: "*" | "_"): boolean {
-    if (!text.endsWith(marker)) return false;
-    if (text.endsWith(marker + marker)) return false;
-    return !this.isEscapedAt(text, text.length - 1);
+    const parsed = this.parseBlockAt(innerText, 0).node;
+    return this.remapNodePositions(parsed, boundaryMap);
   }
 
   private buildBoundaryMapForStrippedLines(

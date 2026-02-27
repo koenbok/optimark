@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { Parser } from "../Parser";
+import { StreamingParser } from "../StreamingParser";
 
 describe("Parser.append optimistic lists", () => {
   it("promotes '- item' into a list with one item", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("- hello");
 
     expect(parser.getLiveTree()).toEqual([
@@ -33,7 +33,7 @@ describe("Parser.append optimistic lists", () => {
   });
 
   it("supports nested unordered list items by indentation", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("- parent\n  - child");
 
     expect(parser.getLiveTree()).toEqual([
@@ -85,7 +85,7 @@ describe("Parser.append optimistic lists", () => {
   });
 
   it("parses multiple sibling list items", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("- a\n- b");
 
     expect(parser.getLiveTree()).toEqual([
@@ -128,7 +128,7 @@ describe("Parser.append optimistic lists", () => {
   });
 
   it("falls back to paragraph when list is interrupted by non-list line", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("- a\nnot-list");
 
     expect(parser.getLiveTree()).toEqual([
@@ -146,7 +146,7 @@ describe("Parser.append optimistic lists", () => {
   });
 
   it("supports incremental growth from one item to nested list", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("- p");
     expect(parser.getLiveTree()).toEqual([
       {
@@ -223,7 +223,7 @@ describe("Parser.append optimistic lists", () => {
   });
 
   it("parses ordered list items", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("1. a\n2. b");
 
     expect(parser.getLiveTree()).toEqual([
@@ -267,7 +267,7 @@ describe("Parser.append optimistic lists", () => {
   });
 
   it("tracks ordered list startNumber from first marker", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("3. c\n4. d");
 
     expect(parser.getLiveTree()).toEqual([
@@ -311,7 +311,7 @@ describe("Parser.append optimistic lists", () => {
   });
 
   it("supports unordered parent with nested ordered list", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("- a\n  1. b");
 
     expect(parser.getLiveTree()).toEqual([
@@ -364,7 +364,7 @@ describe("Parser.append optimistic lists", () => {
   });
 
   it("supports ordered parent with nested unordered list", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("1. a\n   - b");
 
     expect(parser.getLiveTree()).toEqual([

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { Parser } from "../Parser";
+import { StreamingParser } from "../StreamingParser";
 import { node } from "./helpers/ast";
 
 describe("Parser.append hard/soft breaks", () => {
   it("parses soft break on plain newline", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("a\nb");
 
     expect(parser.getLiveTree()).toEqual([
@@ -17,7 +17,7 @@ describe("Parser.append hard/soft breaks", () => {
   });
 
   it("parses hard break on two spaces before newline", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("a  \nb");
 
     expect(parser.getLiveTree()).toEqual([
@@ -30,7 +30,7 @@ describe("Parser.append hard/soft breaks", () => {
   });
 
   it("parses hard break on backslash + newline", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("a\\\nb");
 
     expect(parser.getLiveTree()).toEqual([
@@ -43,7 +43,7 @@ describe("Parser.append hard/soft breaks", () => {
   });
 
   it("parses line breaks inside list item paragraph", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("- a\\\n  b");
 
     expect(parser.getLiveTree()).toEqual([

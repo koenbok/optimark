@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { Parser } from "../Parser";
+import { StreamingParser } from "../StreamingParser";
 
 describe("Parser.append optimistic todo items", () => {
   it("promotes '- [ ] task' into a task item", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("- [ ] task");
 
     expect(parser.getLiveTree()).toEqual([
@@ -34,7 +34,7 @@ describe("Parser.append optimistic todo items", () => {
   });
 
   it("supports nested checked todo items", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("- [ ] parent\n  - [x] child");
 
     expect(parser.getLiveTree()).toEqual([
@@ -88,7 +88,7 @@ describe("Parser.append optimistic todo items", () => {
   });
 
   it("treats uppercase X as checked", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("- [X] done");
 
     expect(parser.getLiveTree()).toEqual([
@@ -119,7 +119,7 @@ describe("Parser.append optimistic todo items", () => {
   });
 
   it("supports sibling task items with mixed checked states", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("- [ ] a\n- [x] b");
 
     expect(parser.getLiveTree()).toEqual([
@@ -164,7 +164,7 @@ describe("Parser.append optimistic todo items", () => {
   });
 
   it("keeps links inside task text as inline children", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("- [ ] [a]");
 
     expect(parser.getLiveTree()).toEqual([

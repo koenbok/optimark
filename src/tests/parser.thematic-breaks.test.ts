@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { Parser } from "../Parser";
+import { StreamingParser } from "../StreamingParser";
 
 describe("Parser.append thematic breaks", () => {
   it("parses --- as thematic break", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("---");
 
     expect(parser.getLiveTree()).toEqual([
@@ -12,7 +12,7 @@ describe("Parser.append thematic breaks", () => {
   });
 
   it("parses *** as thematic break", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("***");
 
     expect(parser.getLiveTree()).toEqual([
@@ -21,7 +21,7 @@ describe("Parser.append thematic breaks", () => {
   });
 
   it("does not parse -- as thematic break", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("--");
 
     expect(parser.getLiveTree()).toEqual([
@@ -35,7 +35,7 @@ describe("Parser.append thematic breaks", () => {
   });
 
   it("parses thematic break inside blockquote", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("> ---");
 
     expect(parser.getLiveTree()).toEqual([

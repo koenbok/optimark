@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { Parser } from "../Parser";
+import { StreamingParser } from "../StreamingParser";
 import { node } from "./helpers/ast";
 
 describe("Parser.append blockquotes", () => {
   it("parses a simple blockquote line", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("> quote");
 
     expect(parser.getLiveTree()).toEqual([
@@ -18,7 +18,7 @@ describe("Parser.append blockquotes", () => {
   });
 
   it("parses nested blockquotes", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("> > quote");
 
     expect(parser.getLiveTree()).toEqual([
@@ -39,7 +39,7 @@ describe("Parser.append blockquotes", () => {
   });
 
   it("parses a list inside blockquote", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("> - item");
 
     expect(parser.getLiveTree()).toEqual([
@@ -76,7 +76,7 @@ describe("Parser.append blockquotes", () => {
   });
 
   it("parses a task item inside blockquote", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("> - [x] item");
 
     expect(parser.getLiveTree()).toEqual([
@@ -114,7 +114,7 @@ describe("Parser.append blockquotes", () => {
   });
 
   it("supports inline code and escapes inside blockquotes", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("> \\*x\\* and `c`");
 
     expect(parser.getLiveTree()).toEqual([
@@ -138,7 +138,7 @@ describe("Parser.append blockquotes", () => {
   });
 
   it("supports incremental growth while typing a blockquote", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append(">");
     expect(parser.getLiveTree()).toEqual([
       {
@@ -161,7 +161,7 @@ describe("Parser.append blockquotes", () => {
   });
 
   it("keeps correct offsets when blockquote prefix width varies by line", () => {
-    const parser = new Parser("");
+    const parser = new StreamingParser("");
     parser.append("> a\n>b");
 
     expect(parser.getLiveTree()).toEqual([
