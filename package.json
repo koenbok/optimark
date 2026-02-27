@@ -1,0 +1,14 @@
+{
+  "name": "streaming-markdown-parser",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "bun test",
+    "bench": "bun bench"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.2",
+    "typescript": "^5.8.2"
+  }
+}
