@@ -88,7 +88,7 @@ describe("Additional markdown coverage", () => {
           type: "link",
           start: 0,
           end: 33,
-          url: null,
+          url: "https://example.com",
           title: "Doc",
           children: [node("text", 1, 5)],
         },

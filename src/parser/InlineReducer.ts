@@ -2,8 +2,8 @@ import type { AstNode } from "../types";
 import { decodeHtmlEntities } from "./SyntaxPrimitives";
 
 type InlineFrame = {
-  type: "emphasis" | "strong";
-  marker: "*" | "_" | "**" | "__";
+  type: "emphasis" | "strong" | "strikethrough";
+  marker: "*" | "_" | "**" | "__" | "~~";
   start: number;
   children: AstNode[];
 };
@@ -239,7 +239,8 @@ export class InlineReducer {
         }
 
         stack.push({
-          type: markerLength === 2 ? "strong" : "emphasis",
+          type:
+            marker === "~~" ? "strikethrough" : markerLength === 2 ? "strong" : "emphasis",
           marker,
           start: markerStart,
           children: [],
@@ -297,11 +298,13 @@ export class InlineReducer {
       text[nextIndex] === "("
     ) {
       const destinationClose = text.indexOf(")", nextIndex + 1);
-      if (destinationClose !== -1) {
-        const destinationRaw = text.slice(nextIndex + 1, destinationClose);
-        const parsedDestination = this.parseInlineDestination(destinationRaw);
-        title = parsedDestination.title;
-      }
+      const destinationRaw =
+        destinationClose === -1
+          ? text.slice(nextIndex + 1)
+          : text.slice(nextIndex + 1, destinationClose);
+      const parsedDestination = this.parseInlineDestination(destinationRaw);
+      url = parsedDestination.url;
+      title = parsedDestination.title;
       nextIndex = destinationClose === -1 ? text.length : destinationClose + 1;
     } else if (
       hasClosedLabel &&
@@ -348,17 +351,32 @@ export class InlineReducer {
     startIndex: number,
     absoluteStart: number,
   ): { node: AstNode; nextIndex: number } {
-    const closingTick = text.indexOf("`", startIndex + 1);
-    const hasClosingTick = closingTick !== -1;
-    const contentEnd = hasClosingTick ? closingTick : text.length;
-    const nextIndex = hasClosingTick ? closingTick + 1 : text.length;
+    const openingRun = this.countDelimiterRun(text, startIndex, "`");
+    let closingStart = -1;
+    let cursor = startIndex + openingRun;
+    while (cursor < text.length) {
+      if (text[cursor] !== "`") {
+        cursor += 1;
+        continue;
+      }
+      const runLength = this.countDelimiterRun(text, cursor, "`");
+      if (runLength === openingRun) {
+        closingStart = cursor;
+        break;
+      }
+      cursor += runLength;
+    }
+
+    const hasClosingTick = closingStart !== -1;
+    const contentEnd = hasClosingTick ? closingStart : text.length;
+    const nextIndex = hasClosingTick ? closingStart + openingRun : text.length;
 
     return {
       node: {
         type: "code_span",
         start: absoluteStart + startIndex,
         end: absoluteStart + nextIndex,
-        value: text.slice(startIndex + 1, contentEnd),
+        value: text.slice(startIndex + openingRun, contentEnd),
       },
       nextIndex,
     };
@@ -482,6 +500,34 @@ export class InlineReducer {
   ): { node: AstNode; nextIndex: number } | null {
     const close = text.indexOf(">", startIndex + 1);
     if (close === -1) {
+      const partial = text.slice(startIndex + 1);
+      if (/^https?:\/\/[^\s>]*$/i.test(partial)) {
+        return {
+          node: {
+            type: "autolink",
+            start: absoluteStart + startIndex,
+            end: absoluteStart + text.length,
+            url: decodeHtmlEntities(partial),
+          },
+          nextIndex: text.length,
+        };
+      }
+      if (
+        /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]*(?:\.[A-Za-z0-9-]*)*$/.test(
+          partial,
+        ) &&
+        partial.includes("@")
+      ) {
+        return {
+          node: {
+            type: "autolink",
+            start: absoluteStart + startIndex,
+            end: absoluteStart + text.length,
+            url: `mailto:${decodeHtmlEntities(partial)}`,
+          },
+          nextIndex: text.length,
+        };
+      }
       return null;
     }
     const raw = text.slice(startIndex + 1, close);
@@ -522,8 +568,7 @@ export class InlineReducer {
     const rest = text.slice(startIndex);
     if (rest.startsWith("<!--")) {
       const close = text.indexOf("-->", startIndex + 4);
-      if (close === -1) return null;
-      const nextIndex = close + 3;
+      const nextIndex = close === -1 ? text.length : close + 3;
       return {
         node: {
           type: "html_inline",
@@ -554,12 +599,20 @@ export class InlineReducer {
   private getEmphasisMarkerAt(
     text: string,
     pos: number,
-  ): "*" | "_" | "**" | "__" | null {
+  ): "*" | "_" | "**" | "__" | "~~" | null {
     const next2 = text.slice(pos, pos + 2);
-    if (next2 === "**" || next2 === "__") return next2;
+    if (next2 === "**" || next2 === "__" || next2 === "~~") return next2;
     const next1 = text[pos];
     if (next1 === "*" || next1 === "_") return next1;
     return null;
+  }
+
+  private countDelimiterRun(text: string, start: number, delimiter: string): number {
+    let count = 0;
+    while (start + count < text.length && text[start + count] === delimiter) {
+      count += 1;
+    }
+    return count;
   }
 
   private buildEscapedMap(text: string): boolean[] {

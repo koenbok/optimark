@@ -35,7 +35,16 @@ describe("Parser.append optimistic links", () => {
     parser.append("[hello](ht");
 
     expect(parser.getLiveTree()).toEqual([
-      node("paragraph", 0, 10, [node("link", 0, 10, [node("text", 1, 6)])]),
+      node("paragraph", 0, 10, [
+        {
+          type: "link",
+          start: 0,
+          end: 10,
+          url: "ht",
+          title: null,
+          children: [node("text", 1, 6)],
+        },
+      ]),
     ]);
   });
 
@@ -44,7 +53,16 @@ describe("Parser.append optimistic links", () => {
     parser.append("[hello](x)");
 
     expect(parser.getLiveTree()).toEqual([
-      node("paragraph", 0, 10, [node("link", 0, 10, [node("text", 1, 6)])]),
+      node("paragraph", 0, 10, [
+        {
+          type: "link",
+          start: 0,
+          end: 10,
+          url: "x",
+          title: null,
+          children: [node("text", 1, 6)],
+        },
+      ]),
     ]);
   });
 
@@ -62,7 +80,16 @@ describe("Parser.append optimistic links", () => {
 
     parser.append("(x)");
     expect(parser.getLiveTree()).toEqual([
-      node("paragraph", 0, 10, [node("link", 0, 10, [node("text", 1, 6)])]),
+      node("paragraph", 0, 10, [
+        {
+          type: "link",
+          start: 0,
+          end: 10,
+          url: "x",
+          title: null,
+          children: [node("text", 1, 6)],
+        },
+      ]),
     ]);
   });
 
@@ -104,7 +131,14 @@ describe("Parser.append optimistic links", () => {
       node("paragraph", 0, 10, [
         node("link", 0, 3, [node("text", 1, 2)]),
         node("text", 3, 4),
-        node("link", 4, 10, [node("text", 5, 6)]),
+        {
+          type: "link",
+          start: 4,
+          end: 10,
+          url: "x",
+          title: null,
+          children: [node("text", 5, 6)],
+        },
       ]),
     ]);
   });

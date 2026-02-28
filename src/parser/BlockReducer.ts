@@ -8,6 +8,7 @@ import {
   countIndent,
   decodeHtmlEntities,
   isFenceCloseLine,
+  isThematicBreakLine,
   parseFenceHeader,
   parseListMarker,
   splitTableSegments,
@@ -74,7 +75,10 @@ export class BlockReducer {
 
     const thematicBreakNode = this.parseThematicBreak(blockText, absoluteStart);
     if (thematicBreakNode) {
-      return { node: thematicBreakNode, consumed: blockText.length };
+      return {
+        node: thematicBreakNode,
+        consumed: Math.max(1, thematicBreakNode.end - absoluteStart),
+      };
     }
 
     const codeBlockNode = this.parseFencedCodeBlock(blockText, absoluteStart);
@@ -194,7 +198,7 @@ export class BlockReducer {
     if (/^(?:`{3,}|~{3,})/.test(rest)) return true;
     if (/^[-+*]\s+/.test(rest)) return true;
     if (/^1[.)]\s+/.test(rest)) return true;
-    if (/^(?:-{3,}|\*{3,})\s*$/.test(rest)) return true;
+    if (isThematicBreakLine(line)) return true;
     if (
       this.options.htmlBlocks &&
       (/^<(?!!--)[A-Za-z/?]/.test(rest) || /^<!--/.test(rest))
@@ -282,15 +286,16 @@ export class BlockReducer {
   }
 
   private parseThematicBreak(blockText: string, absoluteStart: number): AstNode | null {
-    const trimmed = blockText.trim();
-    if (!/^(?:-{3,}|\*{3,})$/.test(trimmed)) {
+    const lineEnd = blockText.indexOf("\n");
+    const line = lineEnd === -1 ? blockText : blockText.slice(0, lineEnd);
+    if (!isThematicBreakLine(line)) {
       return null;
     }
 
     return {
       type: "thematic_break",
       start: absoluteStart,
-      end: absoluteStart + blockText.length,
+      end: absoluteStart + line.length,
     };
   }
 
@@ -408,7 +413,7 @@ export class BlockReducer {
       return null;
     }
     const firstLineTrimmed = (lines[0] ?? "").trimStart();
-    if (/^(?:- |\d+\.\s+)/.test(firstLineTrimmed)) {
+    if (/^(?:- |\d+[.)]\s+)/.test(firstLineTrimmed)) {
       return null;
     }
 
@@ -722,7 +727,15 @@ export class BlockReducer {
       if (line === undefined) {
         break;
       }
-      const marker = parseListMarker(line, indent, true);
+      const isTrailingLine = lineIndex === lines.length - 1;
+      const marker = parseListMarker(
+        line,
+        indent,
+        true,
+        // Treat partial ordered markers as valid at end-of-input.
+        // This enables standalone optimistic tails such as "3" / "3." / "3)".
+        isTrailingLine && (items.length === 0 || listOrdered),
+      );
       if (!marker) {
         break;
       }

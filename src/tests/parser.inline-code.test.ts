@@ -37,6 +37,39 @@ describe("Parser.append inline code spans", () => {
       ]),
     ]);
   });
+
+  it("supports multi-backtick delimiters around inline code", () => {
+    const parser = new StreamingParser("");
+    parser.append("`` `x` ``");
+
+    expect(parser.getLiveTree()).toEqual([
+      node("paragraph", 0, 9, [
+        { type: "code_span", start: 0, end: 9, value: " `x` " },
+      ]),
+    ]);
+  });
+
+  it("does not close a code span with a mismatched backtick run", () => {
+    const parser = new StreamingParser("");
+    parser.append("``code`");
+
+    expect(parser.getLiveTree()).toEqual([
+      node("paragraph", 0, 7, [
+        { type: "code_span", start: 0, end: 7, value: "code`" },
+      ]),
+    ]);
+  });
+
+  it("allows shorter and longer backtick runs inside matching delimiters", () => {
+    const parser = new StreamingParser("");
+    parser.append("```a``b```");
+
+    expect(parser.getLiveTree()).toEqual([
+      node("paragraph", 0, 10, [
+        { type: "code_span", start: 0, end: 10, value: "a``b" },
+      ]),
+    ]);
+  });
 });
 
 describe("Parser.append escapes", () => {

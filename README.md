@@ -188,20 +188,21 @@ Implemented coverage includes:
 
 - Headings: ATX (`#`) and Setext (`===` / `---`)
 - Paragraphs and soft/hard line breaks
-- Emphasis/strong
-- Code spans and fenced code blocks (````` and `~~~`, with language/meta)
+- Emphasis/strong/strikethrough
+- Code spans (single and multi-backtick delimiters) and fenced code blocks (````` and `~~~`, with language/meta)
 - Blockquotes (including nested + lazy continuation)
 - Lists:
   - unordered (`-`, `*`, `+`)
-  - ordered (`1.` and `1)`)
+  - ordered (`1.` and `1)`; large marker numbers supported)
   - task items (`- [ ]`, `- [x]`)
-- Thematic breaks
+- Thematic breaks (`---`, `***`, `___`, and spaced variants like `- - -`)
 - Tables (GFM-style, alignment, nested contexts)
 - Links and images:
   - inline
   - reference-style (`[label][ref]`, `[label]` fallback)
   - reference definitions (`[ref]: url "title"`)
   - inline titles (`(url "title")`)
+  - inline destination URL population for completed and partial destination parsing
 - Autolinks:
   - URL (`<https://...>`)
   - email (`<user@example.com>`)
@@ -231,3 +232,25 @@ This combination gives low-latency live updates for long LLM responses without e
 - HTML nodes are rendered via `dangerouslySetInnerHTML` for `html_block` / `html_inline`.
   Sanitize upstream if content is untrusted (especially if enabling `htmlBlocks`).
 - If incoming text is edited in the middle (not append-only), the component/parser reparses as needed.
+
+## Known Limitations And Roadmap
+
+Current behavior intentionally prioritizes streaming UX and stable incremental updates over full strict CommonMark conformance.
+
+Implemented in this expansion:
+
+- Strikethrough parsing (`~~text~~`) including optimistic unclosed rendering.
+- Multi-backtick code span delimiter matching.
+- Expanded thematic-break handling (underscore and spaced markers).
+- Relaxed ordered-list marker digit limits.
+- Broadened optimistic ordered partial markers (`3`, `3.`, `3)`).
+- More aggressive optimistic autolink/comment promotions before closure.
+- Inline link destination URL population for closed/partial destinations.
+
+Next prioritized CommonMark gaps:
+
+1. **Delimiter-run precision**: closer alignment with full emphasis delimiter-open/close rules.
+2. **Code-span whitespace normalization**: stricter leading/trailing-space normalization semantics.
+3. **HTML block fidelity**: broader CommonMark HTML block categories and termination rules.
+4. **List tight/loose semantics**: richer blank-line-driven tight vs loose list behavior.
+5. **Reference definition edges**: stricter multiline and whitespace-normalization handling.

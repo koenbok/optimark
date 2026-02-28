@@ -1,13 +1,14 @@
 import type { AstNode } from "../types";
 import type { InlineReducer } from "./InlineReducer";
 import {
+  isThematicBreakLine,
   parseFenceHeader,
   parseListMarker,
   splitTableSegments as splitTableSegmentsPrimitive,
 } from "./SyntaxPrimitives";
 import type { ActiveAppendResult, ActiveBlockKind } from "./types";
 
-const FAST_INLINE_CHUNK_PATTERN = /[\\`\n\[\]!<*_\#]/;
+const FAST_INLINE_CHUNK_PATTERN = /[\\`\n\[\]!<>*_\#]/;
 
 export type ActiveAppendContext = {
   pendingText: string;
@@ -28,6 +29,9 @@ class ParagraphState implements ActiveBlockState {
   constructor(readonly node: Extract<AstNode, { type: "paragraph" }>) {}
 
   append(chunk: string, context: ActiveAppendContext): ActiveAppendResult {
+    if (wouldReclassifyParagraph(context.pendingText, chunk)) {
+      return { handled: false, code: "paragraph-reclassification-needed" };
+    }
     if (FAST_INLINE_CHUNK_PATTERN.test(chunk)) {
       return { handled: false, code: "chunk-not-fast-inline" };
     }
@@ -199,6 +203,17 @@ class CodeBlockState implements ActiveBlockState {
 
 function isMarkdownWhitespace(char: string): boolean {
   return char === " " || char === "\t" || char === "\r";
+}
+
+function wouldReclassifyParagraph(pendingText: string, chunk: string): boolean {
+  if (!/[-*_]/.test(chunk)) {
+    return false;
+  }
+
+  const nextText = pendingText + chunk;
+  // Reparse when a plain paragraph tail can become a thematic break
+  // after appending more markers (for example "--" -> "---").
+  return isThematicBreakLine(nextText);
 }
 
 class ListState implements ActiveBlockState {

@@ -41,6 +41,33 @@ describe("Parser.append images", () => {
 });
 
 describe("Parser.append autolinks", () => {
+  it("optimistically parses an unclosed URL autolink candidate", () => {
+    const parser = new StreamingParser("");
+    parser.append("<https://example.com");
+
+    expect(parser.getLiveTree()).toEqual([
+      node("paragraph", 0, 20, [
+        {
+          type: "autolink",
+          start: 0,
+          end: 20,
+          url: "https://example.com",
+        },
+      ]),
+    ]);
+  });
+
+  it("optimistically parses an unclosed html comment candidate", () => {
+    const parser = new StreamingParser("");
+    parser.append("<!-- hello");
+
+    expect(parser.getLiveTree()).toEqual([
+      node("paragraph", 0, 10, [
+        { type: "html_inline", start: 0, end: 10, value: "<!-- hello" },
+      ]),
+    ]);
+  });
+
   it("parses a complete autolink", () => {
     const parser = new StreamingParser("");
     parser.append("<https://example.com>");

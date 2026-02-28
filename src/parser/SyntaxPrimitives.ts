@@ -38,12 +38,42 @@ export type ParsedListMarker = {
   startNumber?: number;
 };
 
+export function isThematicBreakLine(line: string): boolean {
+  const indent = countIndent(line);
+  if (indent > 3) {
+    return false;
+  }
+
+  const rest = line.slice(indent);
+  let marker: "-" | "*" | "_" | null = null;
+  let markerCount = 0;
+  for (let i = 0; i < rest.length; i += 1) {
+    const ch = rest[i] ?? "";
+    if (ch === " " || ch === "\t") {
+      continue;
+    }
+    if (ch !== "-" && ch !== "*" && ch !== "_") {
+      return false;
+    }
+    if (marker === null) {
+      marker = ch;
+    } else if (marker !== ch) {
+      return false;
+    }
+    markerCount += 1;
+  }
+
+  return markerCount >= 3;
+}
+
 export function parseListMarker(
   line: string,
   indent = 0,
   requireExactIndent = true,
+  allowPartialOrdered = false,
 ): ParsedListMarker | null {
-  if (line.length < indent + 2) {
+  const minimumLength = allowPartialOrdered ? indent + 1 : indent + 2;
+  if (line.length < minimumLength) {
     return null;
   }
   if (requireExactIndent && countIndent(line) !== indent) {
@@ -71,14 +101,32 @@ export function parseListMarker(
     };
   }
 
-  const orderedMatch = rest.match(/^(\d{1,9})([.)])\s+/);
-  if (!orderedMatch) {
+  const orderedMatch = rest.match(/^(\d+)([.)])\s+/);
+  if (orderedMatch) {
+    const startNumber = Number.parseInt(orderedMatch[1] ?? "1", 10);
+    return {
+      markerLength: orderedMatch[0].length,
+      isTask: false,
+      checked: false,
+      ordered: true,
+      startNumber,
+    };
+  }
+
+  if (!allowPartialOrdered) {
     return null;
   }
 
-  const startNumber = Number.parseInt(orderedMatch[1] ?? "1", 10);
+  // Optimistic ordered-list markers at end of stream:
+  // "3", "3.", and "3)" should start an empty list item while typing.
+  const orderedPartialMatch = rest.match(/^(\d+)([.)])?$/);
+  if (!orderedPartialMatch) {
+    return null;
+  }
+
+  const startNumber = Number.parseInt(orderedPartialMatch[1] ?? "1", 10);
   return {
-    markerLength: orderedMatch[0].length,
+    markerLength: orderedPartialMatch[0].length,
     isTask: false,
     checked: false,
     ordered: true,
