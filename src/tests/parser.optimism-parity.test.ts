@@ -72,6 +72,26 @@ describe("Parser optimistic parity", () => {
     expect(parseByChars(text)).toEqual(parseOneShot(text));
   });
 
+  it("matches one-shot output for ATX heading followed by single '-'", () => {
+    const text = "## x\n-";
+    expect(parseByChars(text)).toEqual(parseOneShot(text));
+  });
+
+  it("matches one-shot output for ATX heading followed by '--'", () => {
+    const text = "## x\n--";
+    expect(parseByChars(text)).toEqual(parseOneShot(text));
+  });
+
+  it("matches one-shot output for ATX heading followed by '---'", () => {
+    const text = "## x\n---";
+    expect(parseByChars(text)).toEqual(parseOneShot(text));
+  });
+
+  it("matches one-shot output for ATX heading followed by '==='", () => {
+    const text = "## x\n===";
+    expect(parseByChars(text)).toEqual(parseOneShot(text));
+  });
+
   it("matches one-shot output for setext heading with double-dash underline", () => {
     const text = "Title\n--";
     expect(parseByChars(text)).toEqual(parseOneShot(text));

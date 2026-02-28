@@ -65,4 +65,25 @@ describe("Parser state machine fallback parity", () => {
     ]);
     expect(chunked).toEqual(oneShot);
   });
+
+  it("matches one-shot parsing when ATX heading is followed by streamed '--'", () => {
+    const input = "## x\n--";
+    const oneShot = new StreamingParser(input).getLiveTree();
+    const chunked = parseByChunks(["## x\n", "--"]);
+    expect(chunked).toEqual(oneShot);
+  });
+
+  it("matches one-shot parsing when ATX heading is followed by streamed '---'", () => {
+    const input = "## x\n---";
+    const oneShot = new StreamingParser(input).getLiveTree();
+    const chunked = parseByChunks(["## x\n-", "--"]);
+    expect(chunked).toEqual(oneShot);
+  });
+
+  it("matches one-shot parsing when ATX heading is followed by streamed '==='", () => {
+    const input = "## x\n===";
+    const oneShot = new StreamingParser(input).getLiveTree();
+    const chunked = parseByChunks(["## x\n=", "=="]);
+    expect(chunked).toEqual(oneShot);
+  });
 });

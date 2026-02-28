@@ -2,6 +2,7 @@ import type { AstNode } from "../types";
 import type { InlineReducer } from "./InlineReducer";
 import {
   classifySetextSecondLine,
+  isParagraphLikeSetextFirstLine,
   isThematicBreakLine,
   parseFenceHeader,
   parseListMarker,
@@ -218,14 +219,30 @@ function isMarkdownWhitespace(char: string): boolean {
 }
 
 function wouldReclassifyParagraph(pendingText: string, chunk: string): boolean {
-  if (!/[-*_]/.test(chunk)) {
+  // Quick exit: only marker-like characters (or a space that completes a marker,
+  // e.g. "- " or "1. ") can trigger reclassification. This avoids string
+  // allocation for the vast majority of typed characters such as plain letters.
+  const isMarkerChar = /[-*_+\d>]/.test(chunk);
+  const isCompletingSpace = chunk === " " && /[-*+\d.]$/.test(pendingText);
+  if (!isMarkerChar && !isCompletingSpace) {
     return false;
   }
 
   const nextText = pendingText + chunk;
+
   // Reparse when a plain paragraph tail can become a thematic break
-  // after appending more markers (for example "--" -> "---").
-  return isThematicBreakLine(nextText);
+  // (e.g., "--" -> "---").
+  if (isThematicBreakLine(nextText)) {
+    return true;
+  }
+
+  // Reparse when a paragraph is turning into a list item
+  // (e.g., typing "- " or "1. " at the start of a line).
+  if (parseListMarker(nextText, 0, false, true)) {
+    return true;
+  }
+
+  return false;
 }
 
 function classifySetextTail(pendingText: string) {
@@ -237,7 +254,7 @@ function classifySetextTail(pendingText: string) {
     return null;
   }
   const firstLine = pendingText.slice(0, firstLineEnd);
-  if (firstLine.trim().length === 0) {
+  if (!isParagraphLikeSetextFirstLine(firstLine)) {
     return null;
   }
   const secondLine = pendingText.slice(firstLineEnd + 1);

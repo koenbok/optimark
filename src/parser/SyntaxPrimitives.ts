@@ -38,6 +38,20 @@ export type ParsedListMarker = {
   startNumber?: number;
 };
 
+const ATX_HEADING_PATTERN = /^(#{1,6})\s+/;
+
+export function matchAtxHeadingLine(line: string): RegExpMatchArray | null {
+  return line.match(ATX_HEADING_PATTERN);
+}
+
+export function isAtxHeadingLine(line: string): boolean {
+  return ATX_HEADING_PATTERN.test(line);
+}
+
+export function isParagraphLikeSetextFirstLine(line: string): boolean {
+  return line.trim().length > 0 && !isAtxHeadingLine(line);
+}
+
 export type SetextSecondLineClassification =
   | {
       kind: "setext";

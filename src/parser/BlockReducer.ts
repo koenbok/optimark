@@ -6,10 +6,13 @@ import {
 } from "./BoundaryMapper";
 import {
   classifySetextSecondLine,
+  isAtxHeadingLine,
   countIndent,
   decodeHtmlEntities,
+  isParagraphLikeSetextFirstLine,
   isFenceCloseLine,
   isThematicBreakLine,
+  matchAtxHeadingLine,
   parseFenceHeader,
   parseListMarker,
   splitTableSegments,
@@ -128,7 +131,7 @@ export class BlockReducer {
   ): BlockParseResult | null {
     const lineEnd = blockText.indexOf("\n");
     const firstLine = lineEnd === -1 ? blockText : blockText.slice(0, lineEnd);
-    const headingMatch = firstLine.match(/^(#{1,6})\s+/);
+    const headingMatch = matchAtxHeadingLine(firstLine);
     if (!headingMatch) {
       return null;
     }
@@ -195,7 +198,7 @@ export class BlockReducer {
     if (rest.length === 0) return false;
 
     if (rest.startsWith(">")) return true;
-    if (/^#{1,6}\s+/.test(rest)) return true;
+    if (isAtxHeadingLine(rest)) return true;
     if (/^(?:`{3,}|~{3,})/.test(rest)) return true;
     if (/^[-+*]\s+/.test(rest)) return true;
     if (/^1[.)]\s+/.test(rest)) return true;
@@ -260,7 +263,7 @@ export class BlockReducer {
         ? blockText.slice(firstLineEnd + 1)
         : blockText.slice(firstLineEnd + 1, secondLineEnd);
 
-    if (firstLine.trim().length === 0) {
+    if (!isParagraphLikeSetextFirstLine(firstLine)) {
       return null;
     }
     const secondLineClassification = classifySetextSecondLine(secondLine);

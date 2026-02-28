@@ -207,4 +207,60 @@ describe("CommonMark conformance edges", () => {
       },
     ]);
   });
+
+  it("does not treat an ATX heading line as setext content when next line is '-'", () => {
+    const parser = new StreamingParser("## Early Life\n-");
+    expect(parser.getLiveTree()).toEqual([
+      {
+        type: "heading",
+        start: 0,
+        end: 13,
+        depth: 2,
+        children: [node("text", 3, 13)],
+      },
+      node("paragraph", 14, 15, [node("text", 14, 15)]),
+    ]);
+  });
+
+  it("keeps an ATX heading separate from a trailing '--' line", () => {
+    const parser = new StreamingParser("## x\n--");
+    expect(parser.getLiveTree()).toEqual([
+      {
+        type: "heading",
+        start: 0,
+        end: 4,
+        depth: 2,
+        children: [node("text", 3, 4)],
+      },
+      node("paragraph", 5, 7, [node("text", 5, 7)]),
+    ]);
+  });
+
+  it("keeps an ATX heading separate from a trailing thematic break line", () => {
+    const parser = new StreamingParser("## x\n---");
+    expect(parser.getLiveTree()).toEqual([
+      {
+        type: "heading",
+        start: 0,
+        end: 4,
+        depth: 2,
+        children: [node("text", 3, 4)],
+      },
+      { type: "thematic_break", start: 5, end: 8 },
+    ]);
+  });
+
+  it("keeps an ATX heading separate from a trailing '===' line", () => {
+    const parser = new StreamingParser("## x\n===");
+    expect(parser.getLiveTree()).toEqual([
+      {
+        type: "heading",
+        start: 0,
+        end: 4,
+        depth: 2,
+        children: [node("text", 3, 4)],
+      },
+      node("paragraph", 5, 8, [node("text", 5, 8)]),
+    ]);
+  });
 });
