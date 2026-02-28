@@ -80,9 +80,7 @@ export function Markdown({
     previousTextRef.current = text;
     previousOptimisticRef.current = optimistic;
     sourceTextRef.current = text;
-    if (optimistic && !text.startsWith(previousText)) {
-      epochRef.current += 1;
-    }
+    epochRef.current += 1;
     setRenderVersion((version) => version + 1);
   }, [text, optimistic]);
 
@@ -367,9 +365,7 @@ const MemoNodeBlock = memo(
   (previous, next) =>
     previous.node === next.node &&
     previous.revision === next.revision &&
-    previous.components === next.components &&
-    previous.keyPath === next.keyPath &&
-    previous.sourceTextRef === next.sourceTextRef,
+    previous.components === next.components,
 );
 
 function buildKeyPath(path: string, node: AstNode, index: number): string {

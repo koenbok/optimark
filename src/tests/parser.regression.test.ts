@@ -113,3 +113,56 @@ describe("Parser regression: malformed link depth", () => {
     expect(parser.getLiveTree().length).toBeGreaterThan(0);
   });
 });
+
+describe("Parser regression: incremental active-tail reuse", () => {
+  it("reuses open code_block node while appending content lines", () => {
+    const parser = new StreamingParser("");
+    parser.append("```ts\n");
+    const initialNode = parser.getLiveTree()[0];
+    expect(initialNode?.type).toBe("code_block");
+
+    parser.append("const a = 1;\n");
+    const afterAppendNode = parser.getLiveTree()[0];
+    expect(afterAppendNode).toBe(initialNode);
+    expect(afterAppendNode).toEqual({
+      type: "code_block",
+      start: 0,
+      end: 19,
+      language: "ts",
+      meta: null,
+      value: "const a = 1;\n",
+    });
+  });
+
+  it("reuses list node while appending sibling items", () => {
+    const parser = new StreamingParser("");
+    parser.append("- one\n");
+    const initialNode = parser.getLiveTree()[0];
+    expect(initialNode?.type).toBe("list");
+
+    parser.append("- two\n");
+    const afterAppendNode = parser.getLiveTree()[0];
+    expect(afterAppendNode).toBe(initialNode);
+    expect(afterAppendNode?.type).toBe("list");
+    if (!afterAppendNode || afterAppendNode.type !== "list") {
+      throw new Error("expected list node");
+    }
+    expect(afterAppendNode.children.length).toBe(2);
+  });
+
+  it("reuses table node while appending body rows", () => {
+    const parser = new StreamingParser("");
+    parser.append("| h1 | h2 |\n| --- | --- |\n");
+    const initialNode = parser.getLiveTree()[0];
+    expect(initialNode?.type).toBe("table");
+
+    parser.append("| a | b |\n");
+    const afterAppendNode = parser.getLiveTree()[0];
+    expect(afterAppendNode).toBe(initialNode);
+    expect(afterAppendNode?.type).toBe("table");
+    if (!afterAppendNode || afterAppendNode.type !== "table") {
+      throw new Error("expected table node");
+    }
+    expect(afterAppendNode.children.length).toBe(2);
+  });
+});

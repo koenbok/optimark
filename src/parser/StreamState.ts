@@ -1,5 +1,4 @@
 import type { AstNode } from "../types";
-import type { StreamSnapshot } from "./types";
 
 export class StreamState {
   committedBlocks: AstNode[] = [];
@@ -7,12 +6,20 @@ export class StreamState {
   committedOffset = 0;
   liveTree: AstNode[] = [];
 
-  snapshot(): StreamSnapshot {
+  appendPending(text: string): void {
+    if (!text) {
+      return;
+    }
+    this.pendingText += text;
+  }
+
+  commitBoundary(boundary: number): { text: string; consumed: number } {
+    const blockText = this.pendingText.slice(0, boundary);
+    this.pendingText = this.pendingText.slice(boundary + 2);
+    this.committedOffset += boundary + 2;
     return {
-      committedBlocks: this.committedBlocks,
-      pendingText: this.pendingText,
-      committedOffset: this.committedOffset,
-      liveTree: this.liveTree,
+      text: blockText,
+      consumed: boundary + 2,
     };
   }
 }

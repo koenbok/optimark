@@ -5,9 +5,15 @@ export type BlockParseResult = {
   consumed: number;
 };
 
-export type StreamSnapshot = {
-  committedBlocks: AstNode[];
-  pendingText: string;
-  committedOffset: number;
-  liveTree: AstNode[];
+export type ActiveBlockKind =
+  | "paragraph"
+  | "heading"
+  | "blockquote"
+  | "code_block"
+  | "list"
+  | "table";
+
+export type ActiveAppendResult = {
+  handled: boolean;
+  code?: string;
 };

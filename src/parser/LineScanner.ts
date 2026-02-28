@@ -1,3 +1,5 @@
+import { isFenceCloseLine, parseFenceHeader } from "./SyntaxPrimitives";
+
 type FenceState = {
   inFence: boolean;
   indent: string;
@@ -41,7 +43,7 @@ export class LineScanner {
 
   private updateFenceState(line: string, fenceState: FenceState): void {
     if (!fenceState.inFence) {
-      const opener = this.parseFenceHeader(line);
+      const opener = parseFenceHeader(line);
       if (opener) {
         fenceState.inFence = true;
         fenceState.indent = opener.indent;
@@ -50,26 +52,10 @@ export class LineScanner {
       return;
     }
 
-    if (this.isFenceCloseLine(line, fenceState.indent, fenceState.marker)) {
+    if (isFenceCloseLine(line, fenceState.indent, fenceState.marker)) {
       fenceState.inFence = false;
       fenceState.indent = "";
       fenceState.marker = "";
     }
-  }
-
-  private parseFenceHeader(line: string): { indent: string; marker: string } | null {
-    const match = line.match(/^(\s*)(`{3,}|~{3,})([^\s`~]*)?(?:\s+(.*))?$/);
-    if (!match) {
-      return null;
-    }
-    return { indent: match[1] ?? "", marker: match[2] ?? "```" };
-  }
-
-  private isFenceCloseLine(line: string, indent: string, marker: string): boolean {
-    const withoutIndent = line.startsWith(indent) ? line.slice(indent.length) : line;
-    if (marker.startsWith("`")) {
-      return new RegExp(`^\`{${marker.length},}\\s*$`).test(withoutIndent);
-    }
-    return new RegExp(`^~{${marker.length},}\\s*$`).test(withoutIndent);
   }
 }

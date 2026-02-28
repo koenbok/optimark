@@ -62,7 +62,9 @@ describe("Parser chunk invariance", () => {
     "- [ ] task\n- [x] done",
     "> quote\n> next",
     "```\na\n\nb\n```",
+    "~~~\na\n~~~",
     "| h |\n| --- |\n| a |\ntail",
+    "| h1 | h2 |\n| --- | --- |\n| a | b |\ntail",
     "mix **strong** and [link](x) and `code`",
   ];
 

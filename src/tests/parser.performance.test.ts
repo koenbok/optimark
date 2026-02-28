@@ -19,6 +19,39 @@ const appendCharByChar = (count: number): void => {
   }
 };
 
+const appendOpenFenceLines = (count: number): void => {
+  const parser = new StreamingParser("");
+  parser.append("```ts\n");
+  for (let i = 0; i < count; i += 1) {
+    parser.append(`line ${i}\n`);
+  }
+};
+
+const appendOpenFenceSingleLineChars = (count: number): void => {
+  const parser = new StreamingParser("");
+  parser.append("```ts\n");
+  const text = "a".repeat(count);
+  for (let i = 0; i < text.length; i += 1) {
+    parser.append(text[i] ?? "");
+  }
+};
+
+const appendListItems = (count: number): void => {
+  const parser = new StreamingParser("");
+  parser.append("- item 0\n");
+  for (let i = 1; i < count; i += 1) {
+    parser.append(`- item ${i}\n`);
+  }
+};
+
+const appendTableRows = (count: number): void => {
+  const parser = new StreamingParser("");
+  parser.append("| h1 | h2 |\n| --- | --- |\n");
+  for (let i = 0; i < count; i += 1) {
+    parser.append(`| ${i} | ${i + 1} |\n`);
+  }
+};
+
 describe("Parser performance guardrails", () => {
   it("maintains near-linear scaling for char-by-char append", () => {
     const t5k = measureMs(() => appendCharByChar(5_000), 3);
@@ -49,5 +82,30 @@ describe("Parser performance guardrails", () => {
   it("finishes large char-by-char appends within a practical bound", () => {
     const elapsed = measureMs(() => appendCharByChar(40_000), 1);
     expect(elapsed).toBeLessThan(3_000);
+  });
+
+  it("keeps open-fence incremental growth near-linear", () => {
+    const t2k = measureMs(() => appendOpenFenceLines(2_000), 2);
+    const t4k = measureMs(() => appendOpenFenceLines(4_000), 2);
+    expect(t4k / Math.max(t2k, 0.1)).toBeLessThan(4.5);
+  });
+
+  it("keeps open-fence single-line char streaming bounded", () => {
+    const t5k = measureMs(() => appendOpenFenceSingleLineChars(5_000), 2);
+    const t10k = measureMs(() => appendOpenFenceSingleLineChars(10_000), 2);
+    // CI/device variance can be noisy; keep this as a broad superlinear guard.
+    expect(t10k / Math.max(t5k, 0.1)).toBeLessThan(4.5);
+  });
+
+  it("keeps incremental list growth near-linear", () => {
+    const t2k = measureMs(() => appendListItems(2_000), 2);
+    const t4k = measureMs(() => appendListItems(4_000), 2);
+    expect(t4k / Math.max(t2k, 0.1)).toBeLessThan(4.5);
+  });
+
+  it("keeps incremental table growth near-linear", () => {
+    const t1k = measureMs(() => appendTableRows(1_000), 2);
+    const t2k = measureMs(() => appendTableRows(2_000), 2);
+    expect(t2k / Math.max(t1k, 0.1)).toBeLessThan(4.5);
   });
 });

@@ -76,6 +76,25 @@ describe("Parser.append code blocks", () => {
       },
     ]);
   });
+
+  it("closes on fence streamed char-by-char without trailing newline", () => {
+    const parser = new StreamingParser("");
+    parser.append("```\na\n");
+    parser.append("`");
+    parser.append("`");
+    parser.append("`");
+
+    expect(parser.getLiveTree()).toEqual([
+      {
+        type: "code_block",
+        start: 0,
+        end: 9,
+        language: null,
+        meta: null,
+        value: "a",
+      },
+    ]);
+  });
 });
 
 describe("Parser.append code blocks in nested contexts", () => {

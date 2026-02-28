@@ -5,6 +5,7 @@ Incremental Markdown parser with a React renderer built for token-by-token LLM s
 What makes this good:
 
 - Fast append path: parses only new suffix when content grows.
+- Active-block state machine: applies delta updates directly to the active tail node when safe.
 - Optimistic live preview: renders in-progress markdown as valid structure while typing/streaming.
 - React-aware rendering: stable keys + memoized top-level blocks to avoid remount churn.
 - Pragmatic API: low-level parser (`StreamingParser`) and high-level React component (`<Markdown />`).
@@ -70,6 +71,17 @@ This project has two related behaviors:
   - `liveTree`: `committedBlocks + parse(pendingText)`
   - `committedOffset`: absolute index of committed content
 - Blocks commit at blank-line boundaries (`\n\n`), fence-aware (blank lines inside open fences do not prematurely commit).
+
+### Active-block state machine
+
+The parser now uses an internal active-block machine for steady-state streaming updates:
+
+- Keeps a single canonical engine state (`pendingText`, `committedOffset`, `committedBlocks`, `liveTree`).
+- Tracks one active tail block (`paragraph`, `heading`, `blockquote`, `code_block`, `list`, `table`).
+- Applies typed delta transitions to the active block without reparsing the whole tail.
+- Shares list/table/fence primitives between full parsing and incremental states to keep behavior aligned.
+- Uses rolling delta-only fence close detection for open code blocks (no repeated full-line splitting per append).
+- Falls back to full-tail parse when an append invalidates active-state assumptions.
 
 ### Optimistic rendering rules
 

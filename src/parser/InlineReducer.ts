@@ -1,4 +1,5 @@
 import type { AstNode } from "../types";
+import { decodeHtmlEntities } from "./SyntaxPrimitives";
 
 type InlineFrame = {
   type: "emphasis" | "strong";
@@ -371,7 +372,7 @@ export class InlineReducer {
     const labelClose = text.indexOf("]", startIndex + 2);
     const hasClosedLabel = labelClose !== -1;
     const labelEndExclusive = hasClosedLabel ? labelClose : text.length;
-    const alt = this.decodeHtmlEntities(text.slice(startIndex + 2, labelEndExclusive));
+    const alt = decodeHtmlEntities(text.slice(startIndex + 2, labelEndExclusive));
 
     let nextIndex = hasClosedLabel ? labelClose + 1 : text.length;
     let url: string | null = null;
@@ -382,17 +383,15 @@ export class InlineReducer {
       text[nextIndex] === "("
     ) {
       const destinationClose = text.indexOf(")", nextIndex + 1);
+      let title: string | null = null;
       if (destinationClose === -1) {
-        url = this.decodeHtmlEntities(text.slice(nextIndex + 1));
+        url = decodeHtmlEntities(text.slice(nextIndex + 1));
       } else {
         const destinationRaw = text.slice(nextIndex + 1, destinationClose);
         const parsedDestination = this.parseInlineDestination(destinationRaw);
         url = parsedDestination.url;
+        title = parsedDestination.title;
       }
-      const parsedDestination =
-        destinationClose === -1
-          ? null
-          : this.parseInlineDestination(text.slice(nextIndex + 1, destinationClose));
       nextIndex = destinationClose === -1 ? text.length : destinationClose + 1;
       return {
         node: {
@@ -400,7 +399,7 @@ export class InlineReducer {
           start: absoluteStart + startIndex,
           end: absoluteStart + nextIndex,
           url,
-          title: parsedDestination?.title ?? null,
+          title,
           alt,
         },
         nextIndex,
@@ -492,7 +491,7 @@ export class InlineReducer {
           type: "autolink",
           start: absoluteStart + startIndex,
           end: absoluteStart + close + 1,
-          url: this.decodeHtmlEntities(raw),
+          url: decodeHtmlEntities(raw),
         },
         nextIndex: close + 1,
       };
@@ -507,7 +506,7 @@ export class InlineReducer {
           type: "autolink",
           start: absoluteStart + startIndex,
           end: absoluteStart + close + 1,
-          url: `mailto:${this.decodeHtmlEntities(raw)}`,
+          url: `mailto:${decodeHtmlEntities(raw)}`,
         },
         nextIndex: close + 1,
       };
@@ -546,7 +545,7 @@ export class InlineReducer {
         type: "html_inline",
         start: absoluteStart + startIndex,
         end: absoluteStart + nextIndex,
-        value: this.decodeHtmlEntities(match[0]),
+        value: decodeHtmlEntities(match[0]),
       },
       nextIndex,
     };
@@ -626,41 +625,13 @@ export class InlineReducer {
     );
 
     const parsedTitle = titleToken
-      ? this.decodeHtmlEntities(
+      ? decodeHtmlEntities(
           titleToken.length >= 2 ? titleToken.slice(1, -1) : titleToken,
         )
       : null;
     return {
-      url: destination.length > 0 ? this.decodeHtmlEntities(destination) : null,
+      url: destination.length > 0 ? decodeHtmlEntities(destination) : null,
       title: parsedTitle,
     };
-  }
-
-  private decodeHtmlEntities(text: string): string {
-    return text.replace(/&(#x?[0-9A-Fa-f]+|[A-Za-z]+);/g, (entity, body: string) => {
-      if (body.startsWith("#x") || body.startsWith("#X")) {
-        const code = Number.parseInt(body.slice(2), 16);
-        return Number.isFinite(code) ? String.fromCodePoint(code) : entity;
-      }
-      if (body.startsWith("#")) {
-        const code = Number.parseInt(body.slice(1), 10);
-        return Number.isFinite(code) ? String.fromCodePoint(code) : entity;
-      }
-      switch (body) {
-        case "amp":
-          return "&";
-        case "lt":
-          return "<";
-        case "gt":
-          return ">";
-        case "quot":
-          return '"';
-        case "apos":
-        case "#39":
-          return "'";
-        default:
-          return entity;
-      }
-    });
   }
 }

@@ -1,4 +1,17 @@
 import type { AstNode } from "../types";
+import {
+  buildBlockquoteBoundaryMap,
+  buildBoundaryMapForStrippedLines,
+  remapNodePositions,
+} from "./BoundaryMapper";
+import {
+  countIndent,
+  decodeHtmlEntities,
+  isFenceCloseLine,
+  parseFenceHeader,
+  parseListMarker,
+  splitTableSegments,
+} from "./SyntaxPrimitives";
 import type { BlockParseResult } from "./types";
 import { InlineReducer } from "./InlineReducer";
 
@@ -162,7 +175,7 @@ export class BlockReducer {
   }
 
   private isParagraphInterruptingLine(line: string): boolean {
-    const indent = this.countIndent(line);
+    const indent = countIndent(line);
     if (indent > 3) return false;
     const rest = line.slice(indent);
     if (rest.length === 0) return false;
@@ -206,10 +219,10 @@ export class BlockReducer {
     const titleToken = match[3] ?? null;
     const title =
       titleToken && titleToken.length >= 2
-        ? this.decodeHtmlEntities(titleToken.slice(1, -1))
+        ? decodeHtmlEntities(titleToken.slice(1, -1))
         : null;
     const url =
-      destination.length > 0 ? this.decodeHtmlEntities(destination) : null;
+      destination.length > 0 ? decodeHtmlEntities(destination) : null;
 
     this.inline.registerReferenceDefinition(label, url, title);
     return { node: null, consumed: firstLine.length };
@@ -280,14 +293,14 @@ export class BlockReducer {
       runningOffset += line.length + 1;
     }
 
-    const header = this.parseFenceHeader(lines[0] ?? "");
+    const header = parseFenceHeader(lines[0] ?? "");
     if (!header) {
       return null;
     }
 
     let closingLineIndex = -1;
     for (let i = 1; i < lines.length; i += 1) {
-      if (this.isFenceCloseLine(lines[i] ?? "", header.indent, header.marker)) {
+      if (isFenceCloseLine(lines[i] ?? "", header.indent, header.marker)) {
         closingLineIndex = i;
         break;
       }
@@ -319,38 +332,6 @@ export class BlockReducer {
       meta: header.meta,
       value,
     };
-  }
-
-  private parseFenceHeader(
-    line: string,
-  ): {
-    indent: string;
-    marker: string;
-    language: string | null;
-    meta: string | null;
-  } | null {
-    const match = line.match(/^(\s*)(`{3,}|~{3,})([^\s`~]*)?(?:\s+(.*))?$/);
-    if (!match) {
-      return null;
-    }
-    const indent = match[1] ?? "";
-    const marker = match[2] ?? "```";
-    const languageRaw = (match[3] ?? "").trim();
-    const metaRaw = (match[4] ?? "").trim();
-    return {
-      indent,
-      marker,
-      language: languageRaw.length > 0 ? languageRaw : null,
-      meta: metaRaw.length > 0 ? metaRaw : null,
-    };
-  }
-
-  private isFenceCloseLine(line: string, indent: string, marker: string): boolean {
-    const withoutIndent = line.startsWith(indent) ? line.slice(indent.length) : line;
-    if (marker.startsWith("`")) {
-      return new RegExp(`^\`{${marker.length},}\\s*$`).test(withoutIndent);
-    }
-    return new RegExp(`^~{${marker.length},}\\s*$`).test(withoutIndent);
   }
 
   private parseHtmlBlock(blockText: string, absoluteStart: number): AstNode | null {
@@ -385,7 +366,7 @@ export class BlockReducer {
         type: "html_block",
         start: absoluteStart,
         end: absoluteStart + firstLine.length,
-        value: this.decodeHtmlEntities(firstLine),
+        value: decodeHtmlEntities(firstLine),
       };
     }
 
@@ -403,7 +384,7 @@ export class BlockReducer {
       type: "html_block",
       start: absoluteStart,
       end: absoluteStart + consumed,
-      value: this.decodeHtmlEntities(blockText.slice(0, consumed)),
+      value: decodeHtmlEntities(blockText.slice(0, consumed)),
     };
   }
 
@@ -496,7 +477,7 @@ export class BlockReducer {
     if (!line.includes("|")) {
       return null;
     }
-    const segments = this.splitTableSegments(line);
+    const segments = splitTableSegments(line, this.inline.isEscapedAt.bind(this.inline));
     if (segments.length < 1) {
       return null;
     }
@@ -532,7 +513,7 @@ export class BlockReducer {
     if (!line.includes("|")) {
       return null;
     }
-    const segments = this.splitTableSegments(line);
+    const segments = splitTableSegments(line, this.inline.isEscapedAt.bind(this.inline));
     if (segments.length === 0) {
       return null;
     }
@@ -594,34 +575,6 @@ export class BlockReducer {
     return normalized;
   }
 
-  private splitTableSegments(
-    line: string,
-  ): Array<{ raw: string; start: number; end: number }> {
-    let start = 0;
-    let end = line.length;
-    if (line.startsWith("|")) {
-      start = 1;
-    }
-    if (
-      end > start &&
-      line[end - 1] === "|" &&
-      !this.inline.isEscapedAt(line, end - 1)
-    ) {
-      end -= 1;
-    }
-
-    const segments: Array<{ raw: string; start: number; end: number }> = [];
-    let segmentStart = start;
-    for (let i = start; i < end; i += 1) {
-      if (line[i] === "|" && !this.inline.isEscapedAt(line, i)) {
-        segments.push({ raw: line.slice(segmentStart, i), start: segmentStart, end: i });
-        segmentStart = i + 1;
-      }
-    }
-    segments.push({ raw: line.slice(segmentStart, end), start: segmentStart, end });
-    return segments;
-  }
-
   private parseBlockquoteBlock(blockText: string, absoluteStart: number): AstNode | null {
     const lines = blockText.split("\n");
     if (lines.length === 0) {
@@ -667,7 +620,7 @@ export class BlockReducer {
     }
 
     const innerText = strippedLines.join("\n");
-    const boundaryMap = this.buildBlockquoteBoundaryMap(
+    const boundaryMap = buildBlockquoteBoundaryMap(
       lines.slice(0, includedLines),
       lineOffsets.slice(0, includedLines),
       prefixLengths,
@@ -678,9 +631,9 @@ export class BlockReducer {
     const parsedInnerNodes = this.parseBlocks(innerText, 0);
     const innerNodes =
       parsedInnerNodes.length > 0
-        ? parsedInnerNodes.map((node) => this.remapNodePositions(node, boundaryMap))
+        ? parsedInnerNodes.map((node) => remapNodePositions(node, boundaryMap))
         : [
-            this.remapNodePositions(
+            remapNodePositions(
               {
                 type: "paragraph",
                 start: 0,
@@ -707,54 +660,6 @@ export class BlockReducer {
     if (this.getBlockquotePrefixLength(line) > 0) return true;
     if (this.isParagraphInterruptingLine(line)) return false;
     return true;
-  }
-
-  private buildBlockquoteBoundaryMap(
-    lines: string[],
-    lineOffsets: number[],
-    prefixLengths: number[],
-    absoluteStart: number,
-    innerLength: number,
-  ): number[] {
-    const map = new Array<number>(innerLength + 1).fill(absoluteStart);
-    let innerPos = 0;
-
-    for (let i = 0; i < lines.length; i += 1) {
-      const line = lines[i] ?? "";
-      const lineStart = lineOffsets[i] ?? 0;
-      const prefixLength = prefixLengths[i] ?? 0;
-      const stripped = line.slice(prefixLength);
-
-      map[innerPos] = absoluteStart + lineStart + prefixLength;
-
-      for (let k = 0; k < stripped.length; k += 1) {
-        innerPos += 1;
-        map[innerPos] = absoluteStart + lineStart + prefixLength + k + 1;
-      }
-
-      if (i < lines.length - 1) {
-        innerPos += 1;
-      }
-    }
-
-    return map;
-  }
-
-  private remapNodePositions(node: AstNode, boundaryMap: number[]): AstNode {
-    const start = boundaryMap[node.start] ?? node.start;
-    const end = boundaryMap[node.end] ?? node.end;
-    const children =
-      "children" in node && Array.isArray(node.children)
-        ? node.children.map((child: AstNode) =>
-            this.remapNodePositions(child, boundaryMap),
-          )
-        : undefined;
-    return {
-      ...node,
-      start,
-      end,
-      ...(children ? { children } : {}),
-    };
   }
 
   private getBlockquotePrefixLength(line: string): number {
@@ -803,7 +708,7 @@ export class BlockReducer {
       if (line === undefined) {
         break;
       }
-      const marker = this.parseListMarker(line, indent);
+      const marker = parseListMarker(line, indent, true);
       if (!marker) {
         break;
       }
@@ -831,11 +736,11 @@ export class BlockReducer {
         if (continuationLine === undefined) {
           break;
         }
-        const continuationIndent = this.countIndent(continuationLine);
+        const continuationIndent = countIndent(continuationLine);
         if (continuationIndent <= indent) {
           break;
         }
-        if (this.parseListMarker(continuationLine, continuationIndent)) {
+        if (parseListMarker(continuationLine, continuationIndent, true)) {
           break;
         }
 
@@ -882,7 +787,7 @@ export class BlockReducer {
         if (nextLine === undefined) {
           break;
         }
-        const nextIndent = this.countIndent(nextLine);
+        const nextIndent = countIndent(nextLine);
         if (nextIndent <= indent) {
           break;
         }
@@ -945,67 +850,6 @@ export class BlockReducer {
     };
   }
 
-  private parseListMarker(
-    line: string,
-    indent: number,
-  ): {
-    markerLength: number;
-    isTask: boolean;
-    checked: boolean;
-    ordered: boolean;
-    startNumber?: number;
-  } | null {
-    if (line.length < indent + 2) {
-      return null;
-    }
-    if (this.countIndent(line) !== indent) {
-      return null;
-    }
-
-    const rest = line.slice(indent);
-    if (/^[-+*]\s/.test(rest)) {
-      const todoMatch = rest.match(/^[-+*] \[( |x|X)\](?:\s|$)/);
-      if (todoMatch) {
-        const markerState = todoMatch[1] ?? " ";
-        return {
-          markerLength: todoMatch[0].length,
-          isTask: true,
-          checked: markerState.toLowerCase() === "x",
-          ordered: false,
-        };
-      }
-
-      return {
-        markerLength: 2,
-        isTask: false,
-        checked: false,
-        ordered: false,
-      };
-    }
-
-    const orderedMatch = rest.match(/^(\d{1,9})([.)])\s+/);
-    if (!orderedMatch) {
-      return null;
-    }
-
-    const startNumber = Number.parseInt(orderedMatch[1] ?? "1", 10);
-    return {
-      markerLength: orderedMatch[0].length,
-      isTask: false,
-      checked: false,
-      ordered: true,
-      startNumber,
-    };
-  }
-
-  private countIndent(line: string): number {
-    let indent = 0;
-    while (indent < line.length && line[indent] === " ") {
-      indent += 1;
-    }
-    return indent;
-  }
-
   private parseStrippedBlock(
     lines: string[],
     lineStarts: number[],
@@ -1015,7 +859,7 @@ export class BlockReducer {
       line.slice(stripLengths[i] ?? 0),
     );
     const innerText = strippedLines.join("\n");
-    const boundaryMap = this.buildBoundaryMapForStrippedLines(
+    const boundaryMap = buildBoundaryMapForStrippedLines(
       lines,
       lineStarts,
       stripLengths,
@@ -1027,64 +871,7 @@ export class BlockReducer {
       end: 0,
       children: [],
     };
-    return this.remapNodePositions(parsed, boundaryMap);
+    return remapNodePositions(parsed, boundaryMap);
   }
 
-  private buildBoundaryMapForStrippedLines(
-    lines: string[],
-    lineStarts: number[],
-    stripLengths: number[],
-    innerLength: number,
-  ): number[] {
-    const map = new Array<number>(innerLength + 1).fill(0);
-    let innerPos = 0;
-
-    for (let i = 0; i < lines.length; i += 1) {
-      const line = lines[i] ?? "";
-      const lineStart = lineStarts[i] ?? 0;
-      const strip = stripLengths[i] ?? 0;
-      const stripped = line.slice(strip);
-      const contentStart = lineStart + strip;
-
-      map[innerPos] = contentStart;
-      for (let k = 0; k < stripped.length; k += 1) {
-        innerPos += 1;
-        map[innerPos] = contentStart + k + 1;
-      }
-
-      if (i < lines.length - 1) {
-        innerPos += 1;
-      }
-    }
-
-    return map;
-  }
-
-  private decodeHtmlEntities(text: string): string {
-    return text.replace(/&(#x?[0-9A-Fa-f]+|[A-Za-z]+);/g, (entity, body: string) => {
-      if (body.startsWith("#x") || body.startsWith("#X")) {
-        const code = Number.parseInt(body.slice(2), 16);
-        return Number.isFinite(code) ? String.fromCodePoint(code) : entity;
-      }
-      if (body.startsWith("#")) {
-        const code = Number.parseInt(body.slice(1), 10);
-        return Number.isFinite(code) ? String.fromCodePoint(code) : entity;
-      }
-      switch (body) {
-        case "amp":
-          return "&";
-        case "lt":
-          return "<";
-        case "gt":
-          return ">";
-        case "quot":
-          return '"';
-        case "apos":
-        case "#39":
-          return "'";
-        default:
-          return entity;
-      }
-    });
-  }
 }

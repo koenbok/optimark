@@ -77,6 +77,31 @@ describe("React Markdown component", () => {
     expect((renderCounts.get(7) ?? 0) >= 2).toBe(true);
   });
 
+  it("keeps committed blocks stable when active tail exits incremental state", () => {
+    const mounts = new Map<number, number>();
+    const components: MarkdownComponents = {
+      paragraph: ({ node, defaultRender }) => {
+        useEffect(() => {
+          mounts.set(node.start, (mounts.get(node.start) ?? 0) + 1);
+        }, [node.start]);
+        return defaultRender();
+      },
+    };
+
+    const view = render(createElement(Markdown, {
+      text: "intro\n\n```ts\na",
+      components,
+    }));
+    view.rerender(
+      createElement(Markdown, {
+        text: "intro\n\n```ts\na\n```",
+        components,
+      }),
+    );
+
+    expect(mounts.get(0)).toBe(1);
+  });
+
   it("updates rendered output when fast-path appends mutate active tail", () => {
     const view = render(createElement(Markdown, { text: "a" }));
     view.rerender(createElement(Markdown, { text: "ab" }));
