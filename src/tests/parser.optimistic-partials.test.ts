@@ -147,6 +147,24 @@ describe("Parser.append optimistic partial syntax edges", () => {
     }
   });
 
+  it("reclassifies a setext-like tail into paragraph+list once item text arrives", () => {
+    const parser = new StreamingParser("");
+    parser.append("Title\n-");
+    expect(parser.getLiveTree()).toEqual(new StreamingParser("Title\n-").getLiveTree());
+
+    parser.append(" a");
+    expect(parser.getLiveTree()).toEqual(new StreamingParser("Title\n- a").getLiveTree());
+  });
+
+  it("reclassifies when list marker space is present before item content arrives", () => {
+    const parser = new StreamingParser("");
+    parser.append("Title\n- ");
+    expect(parser.getLiveTree()).toEqual(new StreamingParser("Title\n- ").getLiveTree());
+
+    parser.append("item");
+    expect(parser.getLiveTree()).toEqual(new StreamingParser("Title\n- item").getLiveTree());
+  });
+
   it("upgrades thematic break when third marker arrives incrementally", () => {
     const parser = new StreamingParser("");
     parser.append("--");

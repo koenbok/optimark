@@ -5,6 +5,7 @@ import {
   remapNodePositions,
 } from "./BoundaryMapper";
 import {
+  classifySetextSecondLine,
   countIndent,
   decodeHtmlEntities,
   isFenceCloseLine,
@@ -262,8 +263,8 @@ export class BlockReducer {
     if (firstLine.trim().length === 0) {
       return null;
     }
-    const underline = secondLine.match(/^\s{0,3}(=+|-+)\s*$/);
-    if (!underline) {
+    const secondLineClassification = classifySetextSecondLine(secondLine);
+    if (secondLineClassification.kind !== "setext") {
       return null;
     }
 
@@ -275,7 +276,7 @@ export class BlockReducer {
         type: "heading",
         start: absoluteStart,
         end: absoluteStart + consumed,
-        depth: (underline[1]?.startsWith("=") ? 1 : 2) as 1 | 2,
+        depth: secondLineClassification.depth,
         children: this.inline.parseInline(
           headingText,
           absoluteStart + Math.max(0, headingOffsetInLine),

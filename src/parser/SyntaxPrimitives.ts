@@ -38,6 +38,47 @@ export type ParsedListMarker = {
   startNumber?: number;
 };
 
+export type SetextSecondLineClassification =
+  | {
+      kind: "setext";
+      depth: 1 | 2;
+      ambiguous: boolean;
+    }
+  | {
+      kind: "list";
+    }
+  | {
+      kind: "other";
+    };
+
+export function classifySetextSecondLine(line: string): SetextSecondLineClassification {
+  const indent = countIndent(line);
+  if (indent > 3) {
+    return { kind: "other" };
+  }
+  const rest = line.slice(indent);
+  if (rest.length === 0) {
+    return { kind: "other" };
+  }
+
+  if (/^[-+*]\s+/.test(rest) || /^\d+[.)]\s+/.test(rest)) {
+    return { kind: "list" };
+  }
+
+  const underline = rest.match(/^(=+|-+)\s*$/);
+  if (!underline) {
+    return { kind: "other" };
+  }
+
+  const marker = underline[1] ?? "";
+  const isDash = marker.startsWith("-");
+  return {
+    kind: "setext",
+    depth: isDash ? 2 : 1,
+    ambiguous: isDash && marker.length === 1,
+  };
+}
+
 export function isThematicBreakLine(line: string): boolean {
   const indent = countIndent(line);
   if (indent > 3) {

@@ -1,6 +1,7 @@
 import type { AstNode } from "../types";
 import type { InlineReducer } from "./InlineReducer";
 import {
+  classifySetextSecondLine,
   isThematicBreakLine,
   parseFenceHeader,
   parseListMarker,
@@ -59,6 +60,17 @@ class HeadingState implements ActiveBlockState {
   constructor(readonly node: Extract<AstNode, { type: "heading" }>) {}
 
   append(chunk: string, context: ActiveAppendContext): ActiveAppendResult {
+    const setextTailClassification = classifySetextTail(context.pendingText);
+    if (
+      setextTailClassification?.kind === "setext" &&
+      setextTailClassification.depth === this.node.depth
+    ) {
+      const nextClassification = classifySetextTail(context.pendingText + chunk);
+      if (nextClassification?.kind === "list") {
+        return { handled: false, code: "setext-reclassification-needed" };
+      }
+      return { handled: false, code: "setext-fast-path-disabled" };
+    }
     if (FAST_INLINE_CHUNK_PATTERN.test(chunk)) {
       return { handled: false, code: "chunk-not-fast-inline" };
     }
@@ -214,6 +226,22 @@ function wouldReclassifyParagraph(pendingText: string, chunk: string): boolean {
   // Reparse when a plain paragraph tail can become a thematic break
   // after appending more markers (for example "--" -> "---").
   return isThematicBreakLine(nextText);
+}
+
+function classifySetextTail(pendingText: string) {
+  const firstLineEnd = pendingText.indexOf("\n");
+  if (firstLineEnd < 0) {
+    return null;
+  }
+  if (pendingText.indexOf("\n", firstLineEnd + 1) !== -1) {
+    return null;
+  }
+  const firstLine = pendingText.slice(0, firstLineEnd);
+  if (firstLine.trim().length === 0) {
+    return null;
+  }
+  const secondLine = pendingText.slice(firstLineEnd + 1);
+  return classifySetextSecondLine(secondLine);
 }
 
 class ListState implements ActiveBlockState {
