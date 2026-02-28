@@ -15,8 +15,15 @@ import {
 import type { BlockParseResult } from "./types";
 import { InlineReducer } from "./InlineReducer";
 
+type BlockReducerOptions = {
+  htmlBlocks: boolean;
+};
+
 export class BlockReducer {
-  constructor(private readonly inline: InlineReducer) {}
+  constructor(
+    private readonly inline: InlineReducer,
+    private readonly options: BlockReducerOptions = { htmlBlocks: false },
+  ) {}
 
   parseBlocks(text: string, absoluteStart: number): AstNode[] {
     const nodes: AstNode[] = [];
@@ -55,12 +62,14 @@ export class BlockReducer {
       return setextHeading;
     }
 
-    const htmlBlockNode = this.parseHtmlBlock(blockText, absoluteStart);
-    if (htmlBlockNode) {
-      return {
-        node: htmlBlockNode,
-        consumed: Math.max(1, htmlBlockNode.end - absoluteStart),
-      };
+    if (this.options.htmlBlocks) {
+      const htmlBlockNode = this.parseHtmlBlock(blockText, absoluteStart);
+      if (htmlBlockNode) {
+        return {
+          node: htmlBlockNode,
+          consumed: Math.max(1, htmlBlockNode.end - absoluteStart),
+        };
+      }
     }
 
     const thematicBreakNode = this.parseThematicBreak(blockText, absoluteStart);
@@ -186,7 +195,12 @@ export class BlockReducer {
     if (/^[-+*]\s+/.test(rest)) return true;
     if (/^1[.)]\s+/.test(rest)) return true;
     if (/^(?:-{3,}|\*{3,})\s*$/.test(rest)) return true;
-    if (/^<(?!!--)[A-Za-z/?]/.test(rest) || /^<!--/.test(rest)) return true;
+    if (
+      this.options.htmlBlocks &&
+      (/^<(?!!--)[A-Za-z/?]/.test(rest) || /^<!--/.test(rest))
+    ) {
+      return true;
+    }
 
     return false;
   }

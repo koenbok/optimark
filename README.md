@@ -123,11 +123,15 @@ export type {
 
 ```ts
 class StreamingParser {
-  constructor(initialText: string);
+  constructor(initialText: string, options?: StreamingParserOptions);
   append(text: string): void;
   getLiveTree(): AstNode[];
   getPendingText(): string;
 }
+
+type StreamingParserOptions = {
+  htmlBlocks?: boolean; // default: false
+};
 ```
 
 ### `Markdown`
@@ -202,7 +206,7 @@ Implemented coverage includes:
   - URL (`<https://...>`)
   - email (`<user@example.com>`)
 - HTML:
-  - block HTML
+  - block HTML (opt-in via `htmlBlocks: true`)
   - inline HTML
 - Escapes and entity decoding in destinations/titles
 
@@ -222,6 +226,8 @@ This combination gives low-latency live updates for long LLM responses without e
 
 ## Notes
 
+- HTML block parsing is disabled by default. Enable explicitly with:
+  `new StreamingParser(text, { htmlBlocks: true })`.
 - HTML nodes are rendered via `dangerouslySetInnerHTML` for `html_block` / `html_inline`.
-  Sanitize upstream if content is untrusted.
+  Sanitize upstream if content is untrusted (especially if enabling `htmlBlocks`).
 - If incoming text is edited in the middle (not append-only), the component/parser reparses as needed.

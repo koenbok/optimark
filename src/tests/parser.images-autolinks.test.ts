@@ -57,8 +57,19 @@ describe("Parser.append autolinks", () => {
     ]);
   });
 
-  it("parses standalone non-URL angle-brackets as HTML blocks", () => {
+  it("treats standalone non-URL angle-brackets as inline html by default", () => {
     const parser = new StreamingParser("");
+    parser.append("<tag>");
+
+    expect(parser.getLiveTree()).toEqual([
+      node("paragraph", 0, 5, [
+        { type: "html_inline", start: 0, end: 5, value: "<tag>" },
+      ]),
+    ]);
+  });
+
+  it("can parse standalone non-URL angle-brackets as HTML blocks when enabled", () => {
+    const parser = new StreamingParser("", { htmlBlocks: true });
     parser.append("<tag>");
 
     expect(parser.getLiveTree()).toEqual([

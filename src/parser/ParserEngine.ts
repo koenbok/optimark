@@ -6,14 +6,21 @@ import { LineScanner } from "./LineScanner";
 import { replaceActiveTail } from "./LiveTreeAssembler";
 import { StreamState } from "./StreamState";
 
+export type ParserEngineOptions = {
+  htmlBlocks?: boolean;
+};
+
 export class ParserEngine {
   private readonly state = new StreamState();
   private readonly inline = new InlineReducer();
-  private readonly blocks = new BlockReducer(this.inline);
+  private readonly blocks: BlockReducer;
   private readonly scanner = new LineScanner();
   private readonly machine = new BlockStateMachine();
 
-  constructor(initialText: string) {
+  constructor(initialText: string, options: ParserEngineOptions = {}) {
+    this.blocks = new BlockReducer(this.inline, {
+      htmlBlocks: options.htmlBlocks ?? false,
+    });
     if (initialText.length > 0) {
       this.append(initialText);
     }

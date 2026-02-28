@@ -3,8 +3,23 @@ import { StreamingParser } from "../StreamingParser";
 import { node } from "./helpers/ast";
 
 describe("Additional markdown coverage", () => {
-  it("parses html blocks", () => {
+  it("disables html blocks by default", () => {
     const parser = new StreamingParser("<div>\nhello\n</div>");
+    expect(parser.getLiveTree()).toEqual([
+      node("paragraph", 0, 18, [
+        { type: "html_inline", start: 0, end: 5, value: "<div>" },
+        node("soft_break", 5, 6),
+        node("text", 6, 11),
+        node("soft_break", 11, 12),
+        { type: "html_inline", start: 12, end: 18, value: "</div>" },
+      ]),
+    ]);
+  });
+
+  it("can parse html blocks when explicitly enabled", () => {
+    const parser = new StreamingParser("<div>\nhello\n</div>", {
+      htmlBlocks: true,
+    });
     expect(parser.getLiveTree()).toEqual([
       {
         type: "html_block",
