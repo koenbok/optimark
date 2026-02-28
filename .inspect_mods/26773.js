@@ -1,0 +1,1 @@
+(e,t)=>{"use strict";Object.defineProperty(t,"__esModule",{value:!0}),t.ToggleLockCommand=void 0,t.ToggleLockCommand=class{constructor(e){this._previewManager=e,this.id="markdown.preview.toggleLock"}execute(){this._previewManager.toggleLock()}}}

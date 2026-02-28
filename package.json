@@ -1,5 +1,5 @@
 {
-  "name": "streaming-markdown-parser",
+  "name": "optimark",
   "version": "0.1.0",
   "type": "module",
   "private": true,
@@ -8,7 +8,14 @@
     "bench": "bun run \"./bench/parser.append.bench.ts\""
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.2",
     "@types/bun": "^1.3.2",
+    "@types/jsdom": "^28.0.0",
+    "@types/react": "^19.2.14",
+    "jsdom": "^28.1.0",
     "typescript": "^5.8.2"
+  },
+  "dependencies": {
+    "react": "^19.2.4"
   }
 }

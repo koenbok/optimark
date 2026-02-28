@@ -1,0 +1,1 @@
+(e,t)=>{"use strict";Object.defineProperty(t,"__esModule",{value:!0}),t.RenderDocument=void 0,t.RenderDocument=class{constructor(e){this._engine=e,this.id="markdown.api.render"}async execute(e){return(await this._engine.render(e)).html}}}

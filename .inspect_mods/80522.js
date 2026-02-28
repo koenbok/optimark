@@ -1,0 +1,1 @@
+(e,t)=>{"use strict";Object.defineProperty(t,"__esModule",{value:!0}),t.escapeAttribute=function(e){return e.toString().replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/'/g,"&#39;")},t.getNonce=function(){let e="";for(let t=0;t<64;t++)e+="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".charAt(Math.floor(62*Math.random()));return e}}

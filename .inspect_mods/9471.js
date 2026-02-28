@@ -1,0 +1,1 @@
+(e,t)=>{"use strict";Object.defineProperty(t,"__esModule",{value:!0}),t.RefreshPreviewCommand=void 0,t.RefreshPreviewCommand=class{constructor(e,t){this._webviewManager=e,this._engine=t,this.id="markdown.preview.refresh"}execute(){this._engine.cleanCache(),this._webviewManager.refresh()}}}

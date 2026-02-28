@@ -1,0 +1,1 @@
+(e,t)=>{"use strict";Object.defineProperty(t,"__esModule",{value:!0}),t.ReloadPlugins=void 0,t.ReloadPlugins=class{constructor(e,t){this._webviewManager=e,this._engine=t,this.id="markdown.api.reloadPlugins"}execute(){this._engine.reloadPlugins(),this._engine.cleanCache(),this._webviewManager.refresh()}}}
