@@ -57,12 +57,12 @@ describe("Parser.append autolinks", () => {
     ]);
   });
 
-  it("keeps non-URL angle-brackets as text", () => {
+  it("parses standalone non-URL angle-brackets as HTML blocks", () => {
     const parser = new StreamingParser("");
     parser.append("<tag>");
 
     expect(parser.getLiveTree()).toEqual([
-      node("paragraph", 0, 5, [node("text", 0, 5)]),
+      { type: "html_block", start: 0, end: 5, value: "<tag>" },
     ]);
   });
 });

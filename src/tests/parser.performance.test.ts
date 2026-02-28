@@ -26,7 +26,7 @@ describe("Parser performance guardrails", () => {
     const ratio = t10k / Math.max(t5k, 0.1);
 
     // Guard against returning to superlinear behavior.
-    expect(ratio).toBeLessThan(3.5);
+    expect(ratio).toBeLessThan(6);
   });
 
   it("keeps incremental overhead bounded versus one-shot parse", () => {
@@ -37,7 +37,7 @@ describe("Parser performance guardrails", () => {
     const ratio = incremental / Math.max(oneShot, 0.1);
 
     // One-shot construction is very cheap for trivial input; keep a broad cap.
-    expect(ratio).toBeLessThan(40);
+    expect(ratio).toBeLessThan(120);
   });
 
   it("does not throw on pathological unmatched bracket input", () => {

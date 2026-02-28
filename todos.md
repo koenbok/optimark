@@ -37,17 +37,17 @@
 - [x] Tables.
 
 ## Additional Markdown Coverage
-- [ ] Add HTML block parsing.
-- [ ] Add inline HTML parsing.
-- [ ] Add reference link parsing (`[label][ref]`, `[label]` fallback behavior).
-- [ ] Add reference image parsing.
-- [ ] Parse and resolve link/image reference definitions (`[ref]: url "title"`).
-- [ ] Add link/image title parsing for inline destinations (`(url "title")`).
-- [ ] Add email autolink parsing (`<user@example.com>`).
-- [ ] Expand ordered-list edge-case handling (interruption and spacing semantics).
-- [ ] Add fenced code block `~~~` support.
-- [ ] Add broader escape handling for additional punctuation.
-- [ ] Add HTML/entity decoding behavior (`&amp;`, `&lt;`, numeric entities).
-- [ ] Add Setext heading parsing (`Title` + `===` / `---`).
-- [ ] Decide and implement table-cell block-content policy (inline-only vs block-level nesting).
-- [ ] Add stricter blockquote/list/table precedence + continuation semantics (CommonMark/GFM parity pass).
+- [x] Add HTML block parsing.
+- [x] Add inline HTML parsing.
+- [x] Add reference link parsing (`[label][ref]`, `[label]` fallback behavior).
+- [x] Add reference image parsing.
+- [x] Parse and resolve link/image reference definitions (`[ref]: url "title"`).
+- [x] Add link/image title parsing for inline destinations (`(url "title")`).
+- [x] Add email autolink parsing (`<user@example.com>`).
+- [x] Expand ordered-list edge-case handling (interruption and spacing semantics).
+- [x] Add fenced code block `~~~` support.
+- [x] Add broader escape handling for additional punctuation.
+- [x] Add HTML/entity decoding behavior (`&amp;`, `&lt;`, numeric entities).
+- [x] Add Setext heading parsing (`Title` + `===` / `---`).
+- [x] Decide and implement table-cell block-content policy (inline-only vs block-level nesting).
+- [x] Add stricter blockquote/list/table precedence + continuation semantics (CommonMark/GFM parity pass).

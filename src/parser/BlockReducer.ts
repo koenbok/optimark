@@ -19,7 +19,9 @@ export class BlockReducer {
 
       const remaining = text.slice(cursor);
       const parsed = this.parseBlockAt(remaining, absoluteStart + cursor);
-      nodes.push(parsed.node);
+      if (parsed.node) {
+        nodes.push(parsed.node);
+      }
       cursor += Math.max(parsed.consumed, 1);
     }
 
@@ -27,6 +29,27 @@ export class BlockReducer {
   }
 
   parseBlockAt(blockText: string, absoluteStart: number): BlockParseResult {
+    const referenceDefinition = this.parseReferenceDefinitionLine(
+      blockText,
+      absoluteStart,
+    );
+    if (referenceDefinition) {
+      return referenceDefinition;
+    }
+
+    const setextHeading = this.parseSetextHeadingBlock(blockText, absoluteStart);
+    if (setextHeading) {
+      return setextHeading;
+    }
+
+    const htmlBlockNode = this.parseHtmlBlock(blockText, absoluteStart);
+    if (htmlBlockNode) {
+      return {
+        node: htmlBlockNode,
+        consumed: Math.max(1, htmlBlockNode.end - absoluteStart),
+      };
+    }
+
     const thematicBreakNode = this.parseThematicBreak(blockText, absoluteStart);
     if (thematicBreakNode) {
       return { node: thematicBreakNode, consumed: blockText.length };
@@ -40,11 +63,11 @@ export class BlockReducer {
       };
     }
 
-    const tableNode = this.parseTableBlock(blockText, absoluteStart);
-    if (tableNode) {
+    const blockquoteNode = this.parseBlockquoteBlock(blockText, absoluteStart);
+    if (blockquoteNode) {
       return {
-        node: tableNode,
-        consumed: Math.max(1, tableNode.end - absoluteStart),
+        node: blockquoteNode,
+        consumed: Math.max(1, blockquoteNode.end - absoluteStart),
       };
     }
 
@@ -56,11 +79,11 @@ export class BlockReducer {
       };
     }
 
-    const blockquoteNode = this.parseBlockquoteBlock(blockText, absoluteStart);
-    if (blockquoteNode) {
+    const tableNode = this.parseTableBlock(blockText, absoluteStart);
+    if (tableNode) {
       return {
-        node: blockquoteNode,
-        consumed: Math.max(1, blockquoteNode.end - absoluteStart),
+        node: tableNode,
+        consumed: Math.max(1, tableNode.end - absoluteStart),
       };
     }
 
@@ -102,15 +125,132 @@ export class BlockReducer {
   }
 
   private parseParagraph(blockText: string, absoluteStart: number): BlockParseResult {
-    const blockEnd = absoluteStart + blockText.length;
+    const consumed = this.findParagraphConsumedLength(blockText);
+    const paragraphText = blockText.slice(0, consumed);
+    const blockEnd = absoluteStart + paragraphText.length;
     return {
       node: {
         type: "paragraph",
         start: absoluteStart,
         end: blockEnd,
-        children: this.inline.parseInline(blockText, absoluteStart),
+        children: this.inline.parseInline(paragraphText, absoluteStart),
       },
-      consumed: Math.max(1, blockText.length),
+      consumed: Math.max(1, paragraphText.length),
+    };
+  }
+
+  private findParagraphConsumedLength(blockText: string): number {
+    let lineStart = 0;
+    let lineIndex = 0;
+
+    while (lineStart < blockText.length) {
+      const lineEnd = this.findLineEnd(blockText, lineStart);
+      const line = blockText.slice(lineStart, lineEnd);
+
+      if (lineIndex > 0 && this.isParagraphInterruptingLine(line)) {
+        return Math.max(1, lineStart - 1);
+      }
+
+      if (lineEnd >= blockText.length) {
+        break;
+      }
+      lineStart = lineEnd + 1;
+      lineIndex += 1;
+    }
+
+    return blockText.length;
+  }
+
+  private isParagraphInterruptingLine(line: string): boolean {
+    const indent = this.countIndent(line);
+    if (indent > 3) return false;
+    const rest = line.slice(indent);
+    if (rest.length === 0) return false;
+
+    if (rest.startsWith(">")) return true;
+    if (/^#{1,6}\s+/.test(rest)) return true;
+    if (/^(?:`{3,}|~{3,})/.test(rest)) return true;
+    if (/^[-+*]\s+/.test(rest)) return true;
+    if (/^1[.)]\s+/.test(rest)) return true;
+    if (/^(?:-{3,}|\*{3,})\s*$/.test(rest)) return true;
+    if (/^<(?!!--)[A-Za-z/?]/.test(rest) || /^<!--/.test(rest)) return true;
+
+    return false;
+  }
+
+  private findLineEnd(text: string, start: number): number {
+    const idx = text.indexOf("\n", start);
+    return idx === -1 ? text.length : idx;
+  }
+
+  private parseReferenceDefinitionLine(
+    blockText: string,
+    _absoluteStart: number,
+  ): BlockParseResult | null {
+    const lineEnd = blockText.indexOf("\n");
+    const firstLine = lineEnd === -1 ? blockText : blockText.slice(0, lineEnd);
+    const match = firstLine.match(
+      /^\s{0,3}\[([^\]]+)\]:\s*(\S+)(?:\s+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^)\\]|\\.)*\)))?\s*$/,
+    );
+    if (!match) {
+      return null;
+    }
+
+    const label = (match[1] ?? "").trim();
+    let destination = (match[2] ?? "").trim();
+    if (destination.startsWith("<") && destination.endsWith(">")) {
+      destination = destination.slice(1, -1).trim();
+    }
+    destination = destination.replace(/\\([\\`*{}\[\]()#+\-.!_<>~|])/g, "$1");
+
+    const titleToken = match[3] ?? null;
+    const title =
+      titleToken && titleToken.length >= 2
+        ? this.decodeHtmlEntities(titleToken.slice(1, -1))
+        : null;
+    const url =
+      destination.length > 0 ? this.decodeHtmlEntities(destination) : null;
+
+    this.inline.registerReferenceDefinition(label, url, title);
+    return { node: null, consumed: firstLine.length };
+  }
+
+  private parseSetextHeadingBlock(
+    blockText: string,
+    absoluteStart: number,
+  ): BlockParseResult | null {
+    const firstLineEnd = blockText.indexOf("\n");
+    if (firstLineEnd < 0) return null;
+    const secondLineEnd = blockText.indexOf("\n", firstLineEnd + 1);
+    const firstLine = blockText.slice(0, firstLineEnd);
+    const secondLine =
+      secondLineEnd === -1
+        ? blockText.slice(firstLineEnd + 1)
+        : blockText.slice(firstLineEnd + 1, secondLineEnd);
+
+    if (firstLine.trim().length === 0) {
+      return null;
+    }
+    const underline = secondLine.match(/^\s{0,3}(=+|-+)\s*$/);
+    if (!underline) {
+      return null;
+    }
+
+    const headingText = firstLine.trim();
+    const headingOffsetInLine = firstLine.indexOf(headingText);
+    const consumed = firstLineEnd + 1 + secondLine.length;
+    return {
+      node: {
+        type: "heading",
+        start: absoluteStart,
+        end: absoluteStart + consumed,
+        depth: (underline[1]?.startsWith("=") ? 1 : 2) as 1 | 2,
+        children: this.inline.parseInline(
+          headingText,
+          absoluteStart + Math.max(0, headingOffsetInLine),
+        ),
+      },
+      consumed,
     };
   }
 
@@ -147,7 +287,7 @@ export class BlockReducer {
 
     let closingLineIndex = -1;
     for (let i = 1; i < lines.length; i += 1) {
-      if (this.isFenceCloseLine(lines[i] ?? "", header.indent)) {
+      if (this.isFenceCloseLine(lines[i] ?? "", header.indent, header.marker)) {
         closingLineIndex = i;
         break;
       }
@@ -183,24 +323,88 @@ export class BlockReducer {
 
   private parseFenceHeader(
     line: string,
-  ): { indent: string; language: string | null; meta: string | null } | null {
-    const match = line.match(/^(\s*)```([^\s`]*)?(?:\s+(.*))?$/);
+  ): {
+    indent: string;
+    marker: string;
+    language: string | null;
+    meta: string | null;
+  } | null {
+    const match = line.match(/^(\s*)(`{3,}|~{3,})([^\s`~]*)?(?:\s+(.*))?$/);
     if (!match) {
       return null;
     }
     const indent = match[1] ?? "";
-    const languageRaw = (match[2] ?? "").trim();
-    const metaRaw = (match[3] ?? "").trim();
+    const marker = match[2] ?? "```";
+    const languageRaw = (match[3] ?? "").trim();
+    const metaRaw = (match[4] ?? "").trim();
     return {
       indent,
+      marker,
       language: languageRaw.length > 0 ? languageRaw : null,
       meta: metaRaw.length > 0 ? metaRaw : null,
     };
   }
 
-  private isFenceCloseLine(line: string, indent: string): boolean {
+  private isFenceCloseLine(line: string, indent: string, marker: string): boolean {
     const withoutIndent = line.startsWith(indent) ? line.slice(indent.length) : line;
-    return /^```(?:\s*)$/.test(withoutIndent);
+    if (marker.startsWith("`")) {
+      return new RegExp(`^\`{${marker.length},}\\s*$`).test(withoutIndent);
+    }
+    return new RegExp(`^~{${marker.length},}\\s*$`).test(withoutIndent);
+  }
+
+  private parseHtmlBlock(blockText: string, absoluteStart: number): AstNode | null {
+    const firstLineEnd = blockText.indexOf("\n");
+    const firstLine = firstLineEnd === -1 ? blockText : blockText.slice(0, firstLineEnd);
+    if (!/^\s*</.test(firstLine)) {
+      return null;
+    }
+
+    if (/^\s*<!--/.test(firstLine)) {
+      const close = blockText.indexOf("-->");
+      const consumed = close === -1 ? blockText.length : close + 3;
+      return {
+        type: "html_block",
+        start: absoluteStart,
+        end: absoluteStart + consumed,
+        value: blockText.slice(0, consumed),
+      };
+    }
+
+    const singleLineTag = firstLine.match(/^\s*<\/?([A-Za-z][A-Za-z0-9-]*)(?:\s[^<>]*)?>\s*$/);
+    if (!singleLineTag) {
+      return null;
+    }
+
+    const tagName = singleLineTag[1] ?? "";
+    const openingTagMatch = firstLine.match(/^\s*<([A-Za-z][A-Za-z0-9-]*)/);
+    const isClosingOrSelfClosing =
+      /^\s*<\//.test(firstLine) || /\/>\s*$/.test(firstLine);
+    if (isClosingOrSelfClosing || !openingTagMatch) {
+      return {
+        type: "html_block",
+        start: absoluteStart,
+        end: absoluteStart + firstLine.length,
+        value: this.decodeHtmlEntities(firstLine),
+      };
+    }
+
+    const lines = blockText.split("\n");
+    let consumed = firstLine.length;
+    const closingPattern = new RegExp(`^\\s*</${tagName}\\s*>\\s*$`, "i");
+    for (let i = 1; i < lines.length; i += 1) {
+      consumed += 1 + (lines[i]?.length ?? 0);
+      if (closingPattern.test(lines[i] ?? "")) {
+        break;
+      }
+    }
+
+    return {
+      type: "html_block",
+      start: absoluteStart,
+      end: absoluteStart + consumed,
+      value: this.decodeHtmlEntities(blockText.slice(0, consumed)),
+    };
   }
 
   private parseTableBlock(blockText: string, absoluteStart: number): AstNode | null {
@@ -431,23 +635,41 @@ export class BlockReducer {
       runningOffset += line.length + 1;
     }
 
+    const firstPrefix = this.getBlockquotePrefixLength(lines[0] ?? "");
+    if (firstPrefix === 0) {
+      return null;
+    }
+
     const prefixLengths: number[] = [];
     const strippedLines: string[] = [];
+    let includedLines = 0;
 
     for (let i = 0; i < lines.length; i += 1) {
       const line = lines[i] ?? "";
       const prefixLength = this.getBlockquotePrefixLength(line);
-      if (prefixLength === 0) {
-        return null;
+      if (prefixLength > 0) {
+        prefixLengths.push(prefixLength);
+        strippedLines.push(line.slice(prefixLength));
+        includedLines += 1;
+        continue;
       }
-      prefixLengths.push(prefixLength);
-      strippedLines.push(line.slice(prefixLength));
+      if (this.isLazyBlockquoteContinuation(line)) {
+        prefixLengths.push(0);
+        strippedLines.push(line);
+        includedLines += 1;
+        continue;
+      }
+      break;
+    }
+
+    if (includedLines === 0) {
+      return null;
     }
 
     const innerText = strippedLines.join("\n");
     const boundaryMap = this.buildBlockquoteBoundaryMap(
-      lines,
-      lineOffsets,
+      lines.slice(0, includedLines),
+      lineOffsets.slice(0, includedLines),
       prefixLengths,
       absoluteStart,
       innerText.length,
@@ -472,9 +694,19 @@ export class BlockReducer {
     return {
       type: "blockquote",
       start: absoluteStart,
-      end: absoluteStart + blockText.length,
+      end:
+        absoluteStart +
+        (lineOffsets[includedLines - 1] ?? 0) +
+        (lines[includedLines - 1]?.length ?? 0),
       children: innerNodes,
     };
+  }
+
+  private isLazyBlockquoteContinuation(line: string): boolean {
+    if (line.trim().length === 0) return false;
+    if (this.getBlockquotePrefixLength(line) > 0) return true;
+    if (this.isParagraphInterruptingLine(line)) return false;
+    return true;
   }
 
   private buildBlockquoteBoundaryMap(
@@ -545,7 +777,7 @@ export class BlockReducer {
     }
 
     const parsed = this.parseListAtIndent(lines, lineStarts, 0, 0, absoluteStart);
-    if (!parsed || parsed.nextLine !== lines.length) {
+    if (!parsed) {
       return null;
     }
 
@@ -731,8 +963,8 @@ export class BlockReducer {
     }
 
     const rest = line.slice(indent);
-    if (rest.startsWith("- ")) {
-      const todoMatch = rest.match(/^- \[( |x|X)\](?:\s|$)/);
+    if (/^[-+*]\s/.test(rest)) {
+      const todoMatch = rest.match(/^[-+*] \[( |x|X)\](?:\s|$)/);
       if (todoMatch) {
         const markerState = todoMatch[1] ?? " ";
         return {
@@ -751,7 +983,7 @@ export class BlockReducer {
       };
     }
 
-    const orderedMatch = rest.match(/^(\d+)\.\s+/);
+    const orderedMatch = rest.match(/^(\d{1,9})([.)])\s+/);
     if (!orderedMatch) {
       return null;
     }
@@ -789,7 +1021,12 @@ export class BlockReducer {
       stripLengths,
       innerText.length,
     );
-    const parsed = this.parseBlockAt(innerText, 0).node;
+    const parsed = this.parseBlocks(innerText, 0)[0] ?? {
+      type: "paragraph",
+      start: 0,
+      end: 0,
+      children: [],
+    };
     return this.remapNodePositions(parsed, boundaryMap);
   }
 
@@ -821,5 +1058,33 @@ export class BlockReducer {
     }
 
     return map;
+  }
+
+  private decodeHtmlEntities(text: string): string {
+    return text.replace(/&(#x?[0-9A-Fa-f]+|[A-Za-z]+);/g, (entity, body: string) => {
+      if (body.startsWith("#x") || body.startsWith("#X")) {
+        const code = Number.parseInt(body.slice(2), 16);
+        return Number.isFinite(code) ? String.fromCodePoint(code) : entity;
+      }
+      if (body.startsWith("#")) {
+        const code = Number.parseInt(body.slice(1), 10);
+        return Number.isFinite(code) ? String.fromCodePoint(code) : entity;
+      }
+      switch (body) {
+        case "amp":
+          return "&";
+        case "lt":
+          return "<";
+        case "gt":
+          return ">";
+        case "quot":
+          return '"';
+        case "apos":
+        case "#39":
+          return "'";
+        default:
+          return entity;
+      }
+    });
   }
 }

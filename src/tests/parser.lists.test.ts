@@ -127,18 +127,38 @@ describe("Parser.append optimistic lists", () => {
     ]);
   });
 
-  it("falls back to paragraph when list is interrupted by non-list line", () => {
+  it("splits list and paragraph when list is interrupted by non-list line", () => {
     const parser = new StreamingParser("");
     parser.append("- a\nnot-list");
 
     expect(parser.getLiveTree()).toEqual([
       {
-        type: "paragraph",
+        type: "list",
         start: 0,
+        end: 3,
+        ordered: false,
+        tight: false,
+        children: [
+          {
+            type: "list_item",
+            start: 0,
+            end: 3,
+            children: [
+              {
+                type: "paragraph",
+                start: 2,
+                end: 3,
+                children: [{ type: "text", start: 2, end: 3 }],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: "paragraph",
+        start: 4,
         end: 12,
         children: [
-          { type: "text", start: 0, end: 3 },
-          { type: "soft_break", start: 3, end: 4 },
           { type: "text", start: 4, end: 12 },
         ],
       },

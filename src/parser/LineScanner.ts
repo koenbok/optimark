@@ -1,11 +1,12 @@
 type FenceState = {
   inFence: boolean;
   indent: string;
+  marker: string;
 };
 
 export class LineScanner {
   findNextCommitBoundary(text: string): number {
-    const fenceState: FenceState = { inFence: false, indent: "" };
+    const fenceState: FenceState = { inFence: false, indent: "", marker: "" };
     let lineStart = 0;
 
     while (lineStart <= text.length) {
@@ -44,26 +45,31 @@ export class LineScanner {
       if (opener) {
         fenceState.inFence = true;
         fenceState.indent = opener.indent;
+        fenceState.marker = opener.marker;
       }
       return;
     }
 
-    if (this.isFenceCloseLine(line, fenceState.indent)) {
+    if (this.isFenceCloseLine(line, fenceState.indent, fenceState.marker)) {
       fenceState.inFence = false;
       fenceState.indent = "";
+      fenceState.marker = "";
     }
   }
 
-  private parseFenceHeader(line: string): { indent: string } | null {
-    const match = line.match(/^(\s*)```([^\s`]*)?(?:\s+(.*))?$/);
+  private parseFenceHeader(line: string): { indent: string; marker: string } | null {
+    const match = line.match(/^(\s*)(`{3,}|~{3,})([^\s`~]*)?(?:\s+(.*))?$/);
     if (!match) {
       return null;
     }
-    return { indent: match[1] ?? "" };
+    return { indent: match[1] ?? "", marker: match[2] ?? "```" };
   }
 
-  private isFenceCloseLine(line: string, indent: string): boolean {
+  private isFenceCloseLine(line: string, indent: string, marker: string): boolean {
     const withoutIndent = line.startsWith(indent) ? line.slice(indent.length) : line;
-    return /^```(?:\s*)$/.test(withoutIndent);
+    if (marker.startsWith("`")) {
+      return new RegExp(`^\`{${marker.length},}\\s*$`).test(withoutIndent);
+    }
+    return new RegExp(`^~{${marker.length},}\\s*$`).test(withoutIndent);
   }
 }

@@ -1,7 +1,7 @@
 import type { AstNode } from "../types";
 
 export type BlockParseResult = {
-  node: AstNode;
+  node: AstNode | null;
   consumed: number;
 };
 

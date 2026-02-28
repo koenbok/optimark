@@ -7,7 +7,28 @@ type InlineFrame = {
   children: AstNode[];
 };
 
+type ReferenceDefinition = {
+  url: string | null;
+  title: string | null;
+};
+
 export class InlineReducer {
+  private readonly referenceDefinitions = new Map<string, ReferenceDefinition>();
+
+  registerReferenceDefinition(
+    label: string,
+    url: string | null,
+    title: string | null,
+  ): void {
+    const normalized = this.normalizeReferenceLabel(label);
+    if (!normalized) return;
+    this.referenceDefinitions.set(normalized, { url, title });
+  }
+
+  clearReferenceDefinitions(): void {
+    this.referenceDefinitions.clear();
+  }
+
   getPendingSuffixLength(text: string): number {
     if (!text) return 0;
 
@@ -181,6 +202,12 @@ export class InlineReducer {
           index = parsedAutolink.nextIndex;
           continue;
         }
+        const parsedHtml = this.parseHtmlInlineAt(text, index, absoluteStart);
+        if (parsedHtml) {
+          pushNode(parsedHtml.node);
+          index = parsedHtml.nextIndex;
+          continue;
+        }
         pushNode({
           type: "text",
           start: absoluteStart + index,
@@ -261,13 +288,45 @@ export class InlineReducer {
     );
 
     let nextIndex = hasClosedLabel ? labelClose + 1 : text.length;
+    let url: string | null = null;
+    let title: string | null = null;
     if (
       hasClosedLabel &&
       nextIndex < text.length &&
       text[nextIndex] === "("
     ) {
       const destinationClose = text.indexOf(")", nextIndex + 1);
+      if (destinationClose !== -1) {
+        const destinationRaw = text.slice(nextIndex + 1, destinationClose);
+        const parsedDestination = this.parseInlineDestination(destinationRaw);
+        title = parsedDestination.title;
+      }
       nextIndex = destinationClose === -1 ? text.length : destinationClose + 1;
+    } else if (
+      hasClosedLabel &&
+      nextIndex < text.length &&
+      text[nextIndex] === "["
+    ) {
+      const referenceClose = text.indexOf("]", nextIndex + 1);
+      if (referenceClose !== -1) {
+        const referenceRaw = text.slice(nextIndex + 1, referenceClose);
+        const definition = this.resolveReferenceDefinition(
+          referenceRaw.length > 0 ? referenceRaw : labelText,
+        );
+        if (definition) {
+          url = definition.url;
+          title = definition.title;
+        }
+        nextIndex = referenceClose + 1;
+      } else {
+        nextIndex = text.length;
+      }
+    } else if (hasClosedLabel) {
+      const definition = this.resolveReferenceDefinition(labelText);
+      if (definition) {
+        url = definition.url;
+        title = definition.title;
+      }
     }
 
     return {
@@ -275,8 +334,8 @@ export class InlineReducer {
         type: "link",
         start: absoluteStart + startIndex,
         end: absoluteStart + nextIndex,
-        url: null,
-        title: null,
+        url,
+        title,
         children: labelChildren,
       },
       nextIndex,
@@ -312,7 +371,7 @@ export class InlineReducer {
     const labelClose = text.indexOf("]", startIndex + 2);
     const hasClosedLabel = labelClose !== -1;
     const labelEndExclusive = hasClosedLabel ? labelClose : text.length;
-    const alt = text.slice(startIndex + 2, labelEndExclusive);
+    const alt = this.decodeHtmlEntities(text.slice(startIndex + 2, labelEndExclusive));
 
     let nextIndex = hasClosedLabel ? labelClose + 1 : text.length;
     let url: string | null = null;
@@ -323,10 +382,85 @@ export class InlineReducer {
       text[nextIndex] === "("
     ) {
       const destinationClose = text.indexOf(")", nextIndex + 1);
-      const destinationEnd =
-        destinationClose === -1 ? text.length : destinationClose;
-      url = text.slice(nextIndex + 1, destinationEnd);
+      if (destinationClose === -1) {
+        url = this.decodeHtmlEntities(text.slice(nextIndex + 1));
+      } else {
+        const destinationRaw = text.slice(nextIndex + 1, destinationClose);
+        const parsedDestination = this.parseInlineDestination(destinationRaw);
+        url = parsedDestination.url;
+      }
+      const parsedDestination =
+        destinationClose === -1
+          ? null
+          : this.parseInlineDestination(text.slice(nextIndex + 1, destinationClose));
       nextIndex = destinationClose === -1 ? text.length : destinationClose + 1;
+      return {
+        node: {
+          type: "image",
+          start: absoluteStart + startIndex,
+          end: absoluteStart + nextIndex,
+          url,
+          title: parsedDestination?.title ?? null,
+          alt,
+        },
+        nextIndex,
+      };
+    }
+
+    if (
+      hasClosedLabel &&
+      nextIndex < text.length &&
+      text[nextIndex] === "["
+    ) {
+      const referenceClose = text.indexOf("]", nextIndex + 1);
+      if (referenceClose !== -1) {
+        const referenceRaw = text.slice(nextIndex + 1, referenceClose);
+        const definition = this.resolveReferenceDefinition(
+          referenceRaw.length > 0 ? referenceRaw : alt,
+        );
+        nextIndex = referenceClose + 1;
+        return {
+          node: {
+            type: "image",
+            start: absoluteStart + startIndex,
+            end: absoluteStart + nextIndex,
+            url: definition?.url ?? null,
+            title: definition?.title ?? null,
+            alt,
+          },
+          nextIndex,
+        };
+      }
+      nextIndex = text.length;
+      return {
+        node: {
+          type: "image",
+          start: absoluteStart + startIndex,
+          end: absoluteStart + nextIndex,
+          url,
+          title: null,
+          alt,
+        },
+        nextIndex,
+      };
+    }
+
+    if (hasClosedLabel) {
+      const definition = this.resolveReferenceDefinition(alt);
+      if (definition) {
+        url = definition.url;
+      }
+      return {
+        node: {
+          type: "image",
+          start: absoluteStart + startIndex,
+          end: absoluteStart + nextIndex,
+          url,
+          title: definition?.title ?? null,
+          alt,
+        },
+        nextIndex,
+      };
     }
 
     return {
@@ -352,17 +486,69 @@ export class InlineReducer {
       return null;
     }
     const raw = text.slice(startIndex + 1, close);
-    if (!/^https?:\/\/[^\s>]+$/.test(raw)) {
+    if (/^https?:\/\/[^\s>]+$/i.test(raw)) {
+      return {
+        node: {
+          type: "autolink",
+          start: absoluteStart + startIndex,
+          end: absoluteStart + close + 1,
+          url: this.decodeHtmlEntities(raw),
+        },
+        nextIndex: close + 1,
+      };
+    }
+    if (
+      /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(
+        raw,
+      )
+    ) {
+      return {
+        node: {
+          type: "autolink",
+          start: absoluteStart + startIndex,
+          end: absoluteStart + close + 1,
+          url: `mailto:${this.decodeHtmlEntities(raw)}`,
+        },
+        nextIndex: close + 1,
+      };
+    }
+    return null;
+  }
+
+  private parseHtmlInlineAt(
+    text: string,
+    startIndex: number,
+    absoluteStart: number,
+  ): { node: AstNode; nextIndex: number } | null {
+    const rest = text.slice(startIndex);
+    if (rest.startsWith("<!--")) {
+      const close = text.indexOf("-->", startIndex + 4);
+      if (close === -1) return null;
+      const nextIndex = close + 3;
+      return {
+        node: {
+          type: "html_inline",
+          start: absoluteStart + startIndex,
+          end: absoluteStart + nextIndex,
+          value: text.slice(startIndex, nextIndex),
+        },
+        nextIndex,
+      };
+    }
+
+    const match = rest.match(/^<\/?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?>/);
+    if (!match || !match[0]) {
       return null;
     }
+    const nextIndex = startIndex + match[0].length;
     return {
       node: {
-        type: "autolink",
+        type: "html_inline",
         start: absoluteStart + startIndex,
-        end: absoluteStart + close + 1,
-        url: raw,
+        end: absoluteStart + nextIndex,
+        value: this.decodeHtmlEntities(match[0]),
       },
-      nextIndex: close + 1,
+      nextIndex,
     };
   }
 
@@ -405,5 +591,76 @@ export class InlineReducer {
     if (!text.endsWith(marker)) return false;
     if (text.endsWith(marker + marker)) return false;
     return !this.isEscapedAt(text, text.length - 1);
+  }
+
+  private resolveReferenceDefinition(label: string): ReferenceDefinition | null {
+    const normalized = this.normalizeReferenceLabel(label);
+    if (!normalized) return null;
+    return this.referenceDefinitions.get(normalized) ?? null;
+  }
+
+  private normalizeReferenceLabel(label: string): string {
+    return label.replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
+  private parseInlineDestination(raw: string): {
+    url: string | null;
+    title: string | null;
+  } {
+    const trimmed = raw.trim();
+    if (!trimmed) return { url: null, title: null };
+
+    const titleMatch = trimmed.match(
+      /^(.*?)(?:\s+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^)\\]|\\.)*\)))\s*$/,
+    );
+    const destinationRaw = (titleMatch?.[1] ?? trimmed).trim();
+    const titleToken = titleMatch?.[2] ?? null;
+
+    let destination = destinationRaw;
+    if (destination.startsWith("<") && destination.endsWith(">")) {
+      destination = destination.slice(1, -1).trim();
+    }
+    destination = destination.replace(
+      /\\([\\`*{}\[\]()#+\-.!_<>~|])/g,
+      "$1",
+    );
+
+    const parsedTitle = titleToken
+      ? this.decodeHtmlEntities(
+          titleToken.length >= 2 ? titleToken.slice(1, -1) : titleToken,
+        )
+      : null;
+    return {
+      url: destination.length > 0 ? this.decodeHtmlEntities(destination) : null,
+      title: parsedTitle,
+    };
+  }
+
+  private decodeHtmlEntities(text: string): string {
+    return text.replace(/&(#x?[0-9A-Fa-f]+|[A-Za-z]+);/g, (entity, body: string) => {
+      if (body.startsWith("#x") || body.startsWith("#X")) {
+        const code = Number.parseInt(body.slice(2), 16);
+        return Number.isFinite(code) ? String.fromCodePoint(code) : entity;
+      }
+      if (body.startsWith("#")) {
+        const code = Number.parseInt(body.slice(1), 10);
+        return Number.isFinite(code) ? String.fromCodePoint(code) : entity;
+      }
+      switch (body) {
+        case "amp":
+          return "&";
+        case "lt":
+          return "<";
+        case "gt":
+          return ">";
+        case "quot":
+          return '"';
+        case "apos":
+        case "#39":
+          return "'";
+        default:
+          return entity;
+      }
+    });
   }
 }
