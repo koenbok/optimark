@@ -1,1 +1,0 @@
-(e,t)=>{"use strict";Object.defineProperty(t,"__esModule",{value:!0}),t.Schemes=void 0,t.isOfScheme=function(e,t){return t.toLowerCase().startsWith(e+":")},t.Schemes=Object.freeze({http:"http",https:"https",file:"file",untitled:"untitled",mailto:"mailto",vscode:"vscode","vscode-insiders":"vscode-insiders",notebookCell:"vscode-notebook-cell"})}
