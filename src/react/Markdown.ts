@@ -2,9 +2,7 @@ import {
   Fragment,
   createElement,
   memo,
-  useEffect,
   useRef,
-  useState,
   type MutableRefObject,
   type ReactNode,
 } from "react";
@@ -44,9 +42,9 @@ export function Markdown({
   const parserRef = useRef<StreamingParser | null>(null);
   const previousTextRef = useRef<string>(text);
   const previousOptimisticRef = useRef<boolean>(optimistic);
+  const rendererSignatureRef = useRef<string>(getComponentsSignature(components));
   const sourceTextRef = useRef<string>(text);
   const epochRef = useRef<number>(0);
-  const [, setRenderVersion] = useState<number>(0);
 
   if (!parserRef.current) {
     parserRef.current = new StreamingParser(text);
@@ -54,38 +52,30 @@ export function Markdown({
     sourceTextRef.current = text;
   }
 
-  useEffect(() => {
-    const parser = parserRef.current;
-    if (!parser) {
-      return;
-    }
-
+  const parser = parserRef.current;
+  if (parser) {
     const previousText = previousTextRef.current;
     const modeChanged = previousOptimisticRef.current !== optimistic;
-    if (text === previousText && !modeChanged) {
-      return;
-    }
+    const textChanged = text !== previousText;
 
-    if (optimistic && !modeChanged && text.startsWith(previousText)) {
-      parser.append(text.slice(previousText.length));
+    if (textChanged || modeChanged) {
+      if (optimistic && !modeChanged && text.startsWith(previousText)) {
+        parser.append(text.slice(previousText.length));
+      } else {
+        parserRef.current = new StreamingParser(text);
+        epochRef.current += 1;
+      }
       previousTextRef.current = text;
       previousOptimisticRef.current = optimistic;
       sourceTextRef.current = text;
-      setRenderVersion((version) => version + 1);
-      return;
     }
+  }
 
-    const resetParser = new StreamingParser(text);
-    parserRef.current = resetParser;
-    previousTextRef.current = text;
-    previousOptimisticRef.current = optimistic;
-    sourceTextRef.current = text;
-    epochRef.current += 1;
-    setRenderVersion((version) => version + 1);
-  }, [text, optimistic]);
+  const rendererSignature = getComponentsSignature(components);
+  rendererSignatureRef.current = rendererSignature;
 
-  const parser = parserRef.current;
-  const liveTree = parser ? parser.getLiveTree() : [];
+  const activeParser = parserRef.current;
+  const liveTree = activeParser ? activeParser.getLiveTree() : [];
   const rootPath = `root:${epochRef.current}`;
   const children = liveTree.map((node, index) => {
     const keyPath = buildKeyPath(rootPath, node, index);
@@ -94,6 +84,7 @@ export function Markdown({
       keyPath,
       node,
       revision: node.end,
+      rendererSignature,
       sourceTextRef,
       components,
     });
@@ -347,6 +338,7 @@ type NodeBlockProps = {
   keyPath: string;
   node: AstNode;
   revision: number;
+  rendererSignature: string;
   sourceTextRef: MutableRefObject<string>;
   components: MarkdownComponents | undefined;
 };
@@ -365,9 +357,39 @@ const MemoNodeBlock = memo(
   (previous, next) =>
     previous.node === next.node &&
     previous.revision === next.revision &&
-    previous.components === next.components,
+    previous.rendererSignature === next.rendererSignature,
 );
 
 function buildKeyPath(path: string, node: AstNode, index: number): string {
   return `${path}:${node.type}:${node.start}:${index}`;
+}
+
+const rendererIds = new WeakMap<Function, number>();
+let nextRendererId = 1;
+
+function getComponentsSignature(
+  components: MarkdownComponents | undefined,
+): string {
+  if (!components) return "none";
+  const entries: Array<[string, Function]> = [];
+  for (const [type, renderer] of Object.entries(components)) {
+    if (typeof renderer === "function") {
+      entries.push([type, renderer]);
+    }
+  }
+  if (entries.length === 0) return "empty";
+
+  entries.sort(([left], [right]) => left.localeCompare(right));
+  return entries
+    .map(([type, renderer]) => `${type}:${getRendererId(renderer)}`)
+    .join("|");
+}
+
+function getRendererId(renderer: Function): number {
+  const existing = rendererIds.get(renderer);
+  if (existing) return existing;
+  const id = nextRendererId;
+  nextRendererId += 1;
+  rendererIds.set(renderer, id);
+  return id;
 }

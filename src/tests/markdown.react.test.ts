@@ -59,22 +59,54 @@ describe("React Markdown component", () => {
 
   it("avoids rerendering committed blocks while tail block updates", () => {
     const renderCounts = new Map<number, number>();
+    const paragraphRenderer: NonNullable<MarkdownComponents["paragraph"]> = ({
+      node,
+      defaultRender,
+    }) => {
+      renderCounts.set(node.start, (renderCounts.get(node.start) ?? 0) + 1);
+      return defaultRender();
+    };
+    const makeComponents = (): MarkdownComponents => ({
+      // Intentional fresh object per render to validate signature-based memo behavior.
+      paragraph: paragraphRenderer,
+    });
+
+    const view = render(createElement(Markdown, {
+      text: "first\n\ns",
+      components: makeComponents(),
+    }));
+    view.rerender(
+      createElement(Markdown, {
+        text: "first\n\nse",
+        components: makeComponents(),
+      }),
+    );
+    view.rerender(
+      createElement(Markdown, {
+        text: "first\n\nsec",
+        components: makeComponents(),
+      }),
+    );
+
+    expect(renderCounts.get(0)).toBe(1);
+    expect((renderCounts.get(7) ?? 0) >= 2).toBe(true);
+  });
+
+  it("renders once per text update (no extra effect-driven pass)", () => {
+    let paragraphRenders = 0;
     const components: MarkdownComponents = {
       paragraph: ({ node, defaultRender }) => {
-        renderCounts.set(node.start, (renderCounts.get(node.start) ?? 0) + 1);
+        void node;
+        paragraphRenders += 1;
         return defaultRender();
       },
     };
 
-    const view = render(createElement(Markdown, {
-      text: "first\n\ns",
-      components,
-    }));
-    view.rerender(createElement(Markdown, { text: "first\n\nse", components }));
-    view.rerender(createElement(Markdown, { text: "first\n\nsec", components }));
+    const view = render(createElement(Markdown, { text: "hello", components }));
+    expect(paragraphRenders).toBe(1);
 
-    expect(renderCounts.get(0)).toBe(1);
-    expect((renderCounts.get(7) ?? 0) >= 2).toBe(true);
+    view.rerender(createElement(Markdown, { text: "hello!", components }));
+    expect(paragraphRenders).toBe(2);
   });
 
   it("keeps committed blocks stable when active tail exits incremental state", () => {
@@ -270,5 +302,35 @@ describe("React Markdown component", () => {
 
     expect(blockquoteMounts.get(0)).toBe(1);
     expect(listMounts.get(2)).toBe(1);
+  });
+
+  it("applies renderer updates when component functions actually change", () => {
+    const view = render(
+      createElement(Markdown, {
+        text: "hello",
+        components: {
+          paragraph: ({ children }) =>
+            createElement("p", { "data-variant": "a" }, ...children),
+        },
+      }),
+    );
+
+    expect(view.container.querySelector("p")?.getAttribute("data-variant")).toBe(
+      "a",
+    );
+
+    view.rerender(
+      createElement(Markdown, {
+        text: "hello",
+        components: {
+          paragraph: ({ children }) =>
+            createElement("p", { "data-variant": "b" }, ...children),
+        },
+      }),
+    );
+
+    expect(view.container.querySelector("p")?.getAttribute("data-variant")).toBe(
+      "b",
+    );
   });
 });
